@@ -1,9 +1,10 @@
 {
   "ocr_captcha": "1",
   "debug": "0",
-  "class": "2020",
-  "KCH": ["TE204004", "TE204001"],
-  "KCM": ["习近平新时代中国特色社会主义思想概论"],
+  "always": "0",
+  "bx_or_xx": 0,
+  "KCH": [""],
+  "KCM": ["通信原理"],
   "data": {
     "loginname": "20009100501",
     "password": "",

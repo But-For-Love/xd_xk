@@ -87,8 +87,12 @@ def show_msg(json):
         lst = json["data"]["student"]["electiveBatchList"]
         for i in lst:
             print("选课批次：", i["name"], "\t是否可选：", i["canSelect"])
+            if i["canSelect"] == "1":
+                batch_code = i["code"]
     except TypeError:
         print(json["msg"])
+        batch_code = ''
+    return batch_code
 
 
 def choose_Batch(j):
@@ -116,19 +120,20 @@ def choose_Batch(j):
     return h.json()
 
 
-def get_class(j, conf):
+def get_class(j, conf, batch, category=0):
     url = "https://xk.xidian.edu.cn/xsxk/elective/clazz/list"
     header = {
         "Connection": "keep-alive",
         "Content-Type": "application/json;charset=UTF-8",
-        "batchId": "7397c723d6cb457dbfc12e2efb076787",
+        "batchId": batch,
         "Authorization": j["data"]["token"],
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44",
     }
+    cat = ["TJKC", "XGKC"]
     form = {
-            "teachingClassType": "TJKC",
+            "teachingClassType": cat[category],
             "pageNumber": 1,
-            "pageSize": 100,
+            "pageSize": 300,
             "orderBy": "",
             "campus": "S"
     }
@@ -141,12 +146,11 @@ def get_class(j, conf):
     return a.json()
 
 
-def add(j, class_dict, cookie):
+def add(j, class_dict, cookie, batch, category=0):
 
     header = {
-        "Referer": "https://xk.xidian.edu.cn/xsxk/elective/grablessons?batchId=7397c723d6cb457dbfc12e2efb076787",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44",
-        "batchId": "7397c723d6cb457dbfc12e2efb076787",
+        "batchId": batch,
         "Authorization": j["data"]["token"]
     }
 
@@ -162,17 +166,30 @@ def add(j, class_dict, cookie):
 
     url = 'https://xk.xidian.edu.cn/xsxk/elective/clazz/add'
 
-    form = {
-        "clazzType": "TJKC",
-        "clazzId": class_dict["tcList"][0]["JXBID"],
-        "secretVal": class_dict["tcList"][0]["secretVal"],
-        "chooseVolunteer": "1"
-    }
+    if category == 0:
+        form = {
+            "clazzType": "TJKC",
+            "clazzId": class_dict["tcList"][0]["JXBID"],
+            "secretVal": class_dict["tcList"][0]["secretVal"],
+            "chooseVolunteer": "1"
+        }
+    elif category == 1:
+        form = {
+            "clazzType": "XGKC",
+            "clazzId": class_dict["JXBID"],
+            "secretVal": class_dict["secretVal"],
+            "chooseVolunteer": "1"
+        }
+
     cookie["Authorization"] = j["data"]["token"]
-    r = requests.post(url, params=form, headers=header, cookies=cookie)
-    # print(r.text)
-    print(class_dict["KCH"], class_dict["KCM"], end='\t')
-    print(r.json()["msg"])
+
+    msg = ''
+    while msg not in ['该课程已在选课结果中', '所选课程与已选课程冲突']:
+        r = requests.post(url, params=form, headers=header, cookies=cookie)
+        # print(r.text)
+        print(class_dict["KCH"], class_dict["KCM"], end='\t')
+        msg = r.json()["msg"]
+        print(msg)
 
 
 if __name__ == '__main__':
