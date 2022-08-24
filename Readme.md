@@ -7,6 +7,9 @@
 {
   "ocr_captcha": "1",               是否使用自动识别验证码
   "debug": "0",                     是否输出调试文件
+  "class": "2020",
+  "KCH": ["TE204004", "TE204001"],  课程号
+  "KCM": ["习近平新时代中国特色社会主义思想概论"],    课程名
   "data": {
     "loginname": "username",        学号
     "password": "password",         密码

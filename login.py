@@ -4,7 +4,9 @@ import base64
 import matplotlib.pyplot as plt
 import ddddocr
 import os
+from requests import utils
 from encrypt import AES_encrypt
+import time
 
 
 def ocr_captcha(img):
@@ -53,6 +55,7 @@ def login(conf):
     url = "https://xk.xidian.edu.cn/xsxk/auth/login"
 
     header = {
+        "Connection": "keep-alive",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44",
     }
 
@@ -68,7 +71,8 @@ def login(conf):
         with open("login_pac.json", "wb") as f:
             f.write(result.content)      # 字节形式写入，保存为json文件
 
-    return result.json()
+    return result.json(), requests.utils.dict_from_cookiejar(result.cookies)
+    # return result.json()
 
 
 def show_msg(json):
@@ -87,6 +91,91 @@ def show_msg(json):
         print(json["msg"])
 
 
+def choose_Batch(j):
+    """
+    :param j: login.json
+    :return:
+    不需要
+    """
+    url = 'https://xk.xidian.edu.cn/xsxk/elective/user'
+
+    header = {
+        "Connection": "keep-alive",
+        "Authorization": j["data"]["token"],
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44",
+    }
+    form = {
+        "batchId": "7397c723d6cb457dbfc12e2efb076787"
+    }
+    # 这是2020级的批次
+
+    h = requests.post(url, params=form, headers=header)
+    with open("batch_pac.json", "wb") as f:
+        f.write(h.content)  # 字节形式写入，保存为json文件
+    # print(h.text)
+    return h.json()
+
+
+def get_class(j, conf):
+    url = "https://xk.xidian.edu.cn/xsxk/elective/clazz/list"
+    header = {
+        "Connection": "keep-alive",
+        "Content-Type": "application/json;charset=UTF-8",
+        "batchId": "7397c723d6cb457dbfc12e2efb076787",
+        "Authorization": j["data"]["token"],
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44",
+    }
+    form = {
+            "teachingClassType": "TJKC",
+            "pageNumber": 1,
+            "pageSize": 100,
+            "orderBy": "",
+            "campus": "S"
+    }
+    a = requests.post(url, json=form, headers=header)
+
+    if conf['debug'] == '1':
+        with open("classlist.json", "wb") as f:
+            f.write(a.content)  # 字节形式写入，保存为json文件
+    # print(a.text)
+    return a.json()
+
+
+def add(j, class_dict, cookie):
+
+    header = {
+        "Referer": "https://xk.xidian.edu.cn/xsxk/elective/grablessons?batchId=7397c723d6cb457dbfc12e2efb076787",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44",
+        "batchId": "7397c723d6cb457dbfc12e2efb076787",
+        "Authorization": j["data"]["token"]
+    }
+
+    # url1 = 'https://xk.xidian.edu.cn/xsxk/volunteer/list/choose'
+    # form1 = {
+    #     "clazzType": "TJKC",
+    #     "clazzId": clazzId
+    # }
+    # r1 = requests.post(url1, params=form1, headers=header)
+    # print(r1.text)
+
+    # time.sleep(1)
+
+    url = 'https://xk.xidian.edu.cn/xsxk/elective/clazz/add'
+
+    form = {
+        "clazzType": "TJKC",
+        "clazzId": class_dict["tcList"][0]["JXBID"],
+        "secretVal": class_dict["tcList"][0]["secretVal"],
+        "chooseVolunteer": "1"
+    }
+    cookie["Authorization"] = j["data"]["token"]
+    r = requests.post(url, params=form, headers=header, cookies=cookie)
+    # print(r.text)
+    print(class_dict["KCH"], class_dict["KCM"], end='\t')
+    print(r.json()["msg"])
+
+
 if __name__ == '__main__':
     pass
     # 去运行 xk_main.py
+
