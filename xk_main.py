@@ -129,13 +129,17 @@ if __name__ == '__main__':
     print('{:-^30}'.format(""))
     print('{: ^30}'.format("Welcome"))
     print('{:-^30}'.format(""))
-    # main()
-    clazz = [
-        {
-            "KCH": "FL006121",
-            "KXH": ""
-        }
-    ]
-    del_1(1, kc=clazz, always=0)
-    add_1(1, kc=clazz, always=0)
+    main()
+    # clazz = [
+    #     {
+    #         "KCH": "TE204004",
+    #         "KXH": "06"
+    #     },
+    #     {
+    #         "KCH": "TE204004",
+    #         "KXH": "07"
+    #     }
+    # ]
+    # del_1(0, kc=clazz, always=1)
+    # add_1(0, kc=clazz, always=1)
     print("Done")
