@@ -125,21 +125,59 @@ def del_1(bx_or_xx, kc=[{}], always=1):
     #             break
 
 
+def check():
+    """
+    按照课程号检查
+    这里代码特指选修，必修的表单格式不同
+    """
+    with open("conf.json", 'r', encoding="utf-8") as f:
+        conf = json.load(f)  # 加载配置
+    a, b = login(conf)
+
+    batch = show_msg(a)  # 显示个人信息
+    cat = conf["bx_or_xx"]
+    k = 0
+    while 1:
+        k += 1
+        lst = get_class(a, conf, batch=batch, category=cat)["data"]["rows"]
+        for i in lst:
+            if i["KCH"] in ["EY226022", "EY226023", "EY226024", "EY226025",
+                            "EY226026", "EY226027", "EY226028", "EY226029", "EY226030",
+                            "EY226031", "EY226032", "EY226035", "EY226036", "EY226037",
+                            "EY226038", "EY226039", "EY226041", "EY226042",
+                            "EY226043", "EY226044", "EY226045", "EY226046", "EY226047"] and i["SFYX"] == "0":
+                print(i["KCM"], i["numberOfSelected"], i["classCapacity"])
+                if i["numberOfSelected"] < i["classCapacity"]:
+                    print(i["KXH"], i["KCM"])
+                    add(a, i, b, batch, category=1, always=0)
+        print("第", k, "次", k*"-")
+        k = k % 10
+        time.sleep(0.5)
+
+
 if __name__ == '__main__':
     print('{:-^30}'.format(""))
     print('{: ^30}'.format("Welcome"))
     print('{:-^30}'.format(""))
-    main()
+    # main()
     # clazz = [
     #     {
-    #         "KCH": "TE204004",
-    #         "KXH": "06"
+    #         "KCH": "ZH226044",
+    #         "KXH": ""
     #     },
     #     {
-    #         "KCH": "TE204004",
-    #         "KXH": "07"
+    #         "KCH": "ZH226041",
+    #         "KXH": ""
     #     }
     # ]
     # del_1(0, kc=clazz, always=1)
-    # add_1(0, kc=clazz, always=1)
+    # add_1(1, kc=clazz, always=1)
+
+    # with异常处理
+    # while 1:
+    #     try:
+    #         check()
+    #     except:
+    #         pass
+
     print("Done")

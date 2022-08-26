@@ -192,19 +192,19 @@ def add(j, class_dict, cookie, batch, always=1, category=0):
             r = requests.post(url, params=form, headers=header, cookies=cookie)
             # print(r.text)
             print(class_dict["KCH"], class_dict["KCM"], end='\t')
-            print(class_dict["SKJS"], end='\t')
+            # print(class_dict["SKJS"], end='\t')
             print("选课", end='\t')
             msg = r.json()["msg"]
             print(msg, end='')
             print(k*"-")
             k += 1
             k = k % 10
-            time.sleep(0.2)
+            time.sleep(1)
     else:
         r = requests.post(url, params=form, headers=header, cookies=cookie)
         # print(r.text)
         print(class_dict["KCH"], class_dict["KCM"], end='\t')
-        print(class_dict["SKJS"], end='\t')
+        # print(class_dict["SKJS"], end='\t')
         print("选课", end='\t')
         msg = r.json()["msg"]
         print(msg)
