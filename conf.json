@@ -1,11 +1,11 @@
 {
   "ocr_captcha": "1",
-  "debug": "0",
+  "debug": "1",
   "bx_or_xx": 0,
   "bx": [
     {
       "KCH": "TE204003",
-      "KXH": "02"
+      "KXH": "06"
     }
   ],
   "xx": [
@@ -15,7 +15,7 @@
   ],
   "data": {
     "loginname": "20009100501",
-    "password": "",
+    "password": "Zyx/0235",
     "captcha": "xxxx",
     "uuid": "xxxx"
   }

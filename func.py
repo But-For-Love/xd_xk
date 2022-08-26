@@ -87,13 +87,13 @@ def show_msg(json):
         lst = json["data"]["student"]["electiveBatchList"]
         for i in lst:
             print("选课批次：", i["name"], "\t是否可选：", i["canSelect"])
-            if i["canSelect"] == "1" and "2020级" in i["name"]:
+            if i["canSelect"] == "1" and "2020" in i["name"]:
                 batch_code = i["code"]
     except TypeError:
         print(json["msg"])
         batch_code = ''
-    print(batch_code)
-    print(json["data"]["token"])
+    # print(batch_code)
+    # print(json["data"]["token"])
     return batch_code
 
 
@@ -135,7 +135,7 @@ def get_class(j, conf, batch, category=0):
     form = {
             "teachingClassType": cat[category],
             "pageNumber": 1,
-            "pageSize": 30,
+            "pageSize": 300,
             "orderBy": "",
             "campus": "S"
     }
@@ -243,7 +243,7 @@ def dele(j, class_dict, cookie, batch, always=1, category=0):
 
     if always == 1:
         msg = ''
-        while msg not in ['该课程已在选课结果中', '所选课程与已选课程冲突', '操作成功']:
+        while msg not in ['所选课程与已选课程冲突', '操作成功']:
             r = requests.post(url, params=form, headers=header, cookies=cookie)
             # print(r.text)
             print(class_dict["KCH"], class_dict["KCM"], end='\t')

@@ -56,14 +56,14 @@ def add_1(bx_or_xx, kc=[{}], always=1):
                 if i["KCH"] == kch["KCH"]:
                     for j in i["tcList"]:
                         if j["KXH"] == kch["KXH"]:
-                            add(a, j, cookie=b, batch=batch, category=cat)
+                            add(a, j, cookie=b, batch=batch, category=cat, always=always)
                             break
 
     elif cat == 1:
         for kch in kc:  # 课程号索引
             for i in lst["data"]["rows"]:
                 if i["KCH"] == kch["KCH"]:
-                    add(a, i, cookie=b, batch=batch, category=cat)
+                    add(a, i, cookie=b, batch=batch, category=cat, always=always)
                     break
 
 
@@ -102,14 +102,14 @@ def del_1(bx_or_xx, kc=[{}], always=1):
                 if i["KCH"] == kch["KCH"]:
                     for j in i["tcList"]:
                         if j["KXH"] == kch["KXH"]:
-                            dele(a, j, cookie=b, batch=batch, category=cat)
+                            dele(a, j, cookie=b, batch=batch, category=cat, always=always)
                             break
 
     elif cat == 1:
         for kch in kc:  # 课程号索引
             for i in lst["data"]["rows"]:
                 if i["KCH"] == kch["KCH"]:
-                    dele(a, i, cookie=b, batch=batch, category=cat)
+                    dele(a, i, cookie=b, batch=batch, category=cat, always=always)
                     break
 
     # for kch in KCH:
@@ -129,13 +129,13 @@ if __name__ == '__main__':
     print('{:-^30}'.format(""))
     print('{: ^30}'.format("Welcome"))
     print('{:-^30}'.format(""))
-    main()
-    # clazz = [
-    #     {
-    #         "KCH": "TE204003",
-    #         "KXH": "06"
-    #     }
-    # ]
-    # del_1(0, kc=clazz, always=1)
-    # add_1(0, kc=clazz, always=1)
+    # main()
+    clazz = [
+        {
+            "KCH": "FL006121",
+            "KXH": ""
+        }
+    ]
+    del_1(1, kc=clazz, always=0)
+    add_1(1, kc=clazz, always=0)
     print("Done")
