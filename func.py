@@ -288,9 +288,12 @@ def add(j, class_dict, cookie, batch, always=1, category=0, log_func=None, stop_
         }
 
     cookie["Authorization"] = j["data"]["token"]
-    # 不需要重试的情况：已选上、冲突、已满、选课成功
+    # 不需要重试的情况：已选上、冲突、已满、门数/学分超限、选课成功
     _stop_msgs = ['该课程已在选课结果中', '所选课程与已选课程冲突',
-                  '所选课程人数已满', '操作成功']
+                  '所选课程人数已满', '操作成功',
+                  '选课门数限制', '学分限制',
+                  '选课门数已满', '学分已满',
+                  '选课门数超出', '学分超出']
     k = 1
     if always == 1:
         msg = ''
