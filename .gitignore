@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 *.pyo
 conf.json
+captcha_pac.json
+login_pac.json
+batch_pac.json
+classlist.json
