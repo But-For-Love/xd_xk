@@ -190,8 +190,8 @@ class CourseBrowserDialog(tk.Toplevel):
     def __init__(self, parent, conf):
         super().__init__(parent)
         self.title("浏览课程 — 正在加载…")
-        self.geometry("1050x650")
-        self.minsize(900, 500)
+        self.geometry("1050x750")
+        self.minsize(900, 600)
         self.grab_set()
         self.configure(bg=C.BG)
         self.selected_courses = []
@@ -231,7 +231,7 @@ class CourseBrowserDialog(tk.Toplevel):
         tf = ttk.Frame(self); tf.pack(fill=BOTH, expand=True, padx=12, pady=4)
 
         self.tree = ttk.Treeview(tf, columns=_COLS, show="headings",
-                                 selectmode="extended", height=22)
+                                 selectmode="extended")
         for c, h in zip(_COLS, _HEAD):
             self.tree.heading(c, text=h)
 
