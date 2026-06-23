@@ -4,12 +4,11 @@
 
 ## 快速开始
 
-```bash   ”“bash
+```bash   ”“bash   “bash”;“bash
 # 1. 安装依赖
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txtPIP install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
 # 2. 启动 GUI
-python gui.py
+
 ```
 
 
@@ -17,23 +16,23 @@ python gui.py
 
 GUI 模式下无需手动编辑 `conf.json`，关闭窗口时自动保存。手动编辑时的格式：
 
-```json
+```json   ' ' ' json
 {
-  "ocr_captcha": "1",
-  "debug": "0",
+  "ocr_captcha": "1",   "ocr_captcha": "1",   "ocr_captcha": "1",
+  "debug": "0",   "debug": "0",
   "batch_name": "第一轮正选（国际创新周）",
-  "bx_or_xx": 0,
-  "bx": [
-    { "KCH": "TE204003", "KXH": "02" }
+  "bx_or_xx": 0,   "bx_or_xx": 0,
+  "bx": [   "bx": [
+    { "KCH": "TE204003", "KXH": "02" }{ "KCH": "TE204003", "KXH": "02" }
   ],
-  "xx": [
-    { "KCH": "FL006066" }
+  "xx": [   "xx": [
+    { "KCH": "FL006066" }   { "KCH": "FL006066" }
   ],
-  "data": {
-    "loginname": "你的学号",
-    "password": "你的密码",
-    "captcha": "xxxx",
-    "uuid": "xxxx"
+  "data": {   "data": {
+    "loginname": "你的学号",   "loginname": "你的学号",
+    "password": "你的密码",   "password": "你的密码",
+    "captcha": "xxxx",   "captcha": "xxxx",
+    "uuid": "xxxx"   "uuid": "xxxx"
   }
 }
 ```
