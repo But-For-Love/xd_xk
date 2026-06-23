@@ -61,9 +61,9 @@ def load_conf():
 
 def save_conf(loginname, password, ocr, debug, courses,
               batch_name="第一轮正选（国际创新周）"):
-    bx = [{"KCH": c["KCH"], "KXH": c.get("KXH", "")}
+    bx = [{"KCH": c["KCH"], "KXH": c.get("KXH", ""), "KCM": c.get("KCM", "")}
           for c in courses if c["category"] == 0]
-    xx = [{"KCH": c["KCH"]}
+    xx = [{"KCH": c["KCH"], "KCM": c.get("KCM", "")}
           for c in courses if c["category"] == 1]
     conf = {
         "ocr_captcha": "1" if ocr else "0",
@@ -617,9 +617,9 @@ class Application:
         self.v_dbg.set(c.get("debug", "0") == "1")
         self.v_batch.set(c.get("batch_name", "第一轮正选（国际创新周）"))
         for x in c.get("bx", []):
-            self.tree.insert("", END, values=("必修", x["KCH"], x.get("KXH", ""), ""))
+            self.tree.insert("", END, values=("必修", x["KCH"], x.get("KXH", ""), x.get("KCM", "")))
         for x in c.get("xx", []):
-            self.tree.insert("", END, values=("选修", x["KCH"], "", ""))
+            self.tree.insert("", END, values=("选修", x["KCH"], "", x.get("KCM", "")))
         self._cnt()
 
     def _save(self):
