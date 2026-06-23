@@ -190,8 +190,8 @@ class CourseBrowserDialog(tk.Toplevel):
     def __init__(self, parent, conf):
         super().__init__(parent)
         self.title("浏览课程 — 正在加载…")
-        self.geometry("900x540")
-        self.minsize(720, 400)
+        self.geometry("1050x650")
+        self.minsize(900, 500)
         self.grab_set()
         self.configure(bg=C.BG)
         self.selected_courses = []
@@ -231,7 +231,7 @@ class CourseBrowserDialog(tk.Toplevel):
         tf = ttk.Frame(self); tf.pack(fill=BOTH, expand=True, padx=12, pady=4)
 
         self.tree = ttk.Treeview(tf, columns=_COLS, show="headings",
-                                 selectmode="extended", height=18)
+                                 selectmode="extended", height=22)
         for c, h in zip(_COLS, _HEAD):
             self.tree.heading(c, text=h)
 
@@ -402,8 +402,8 @@ class Application:
     def __init__(self, root: ttk.Window):
         self.root = root
         self.root.title("西电自动选课工具")
-        self.root.geometry("900x780")
-        self.root.minsize(800, 680)
+        self.root.geometry("960x860")
+        self.root.minsize(880, 760)
 
         self.msg_q: queue.Queue = queue.Queue()
         self.stop_ev = threading.Event()
@@ -524,7 +524,7 @@ class Application:
         card.pack(fill=BOTH, padx=16, pady=(4, 8), expand=False)
 
         self.log = tk.Text(
-            card, height=14, wrap="word",
+            card, height=18, wrap="word",
             font=("Cascadia Code", 9),
             bg=C.LOG_BG, fg=C.LOG_FG,
             insertbackground=C.LOG_FG,
@@ -914,8 +914,8 @@ if __name__ == "__main__":
     root = ttk.Window(
         title="西电自动选课工具",
         themename="cosmo",       # Fluent 浅色主题
-        size=(900, 780),
-        minsize=(800, 680),
+        size=(960, 860),
+        minsize=(880, 760),
     )
     app = Application(root)
     root.mainloop()
