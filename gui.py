@@ -187,7 +187,7 @@ _HEAD = ("✔",   "类别","课程号","课序号","课程名","教师","已选/
 class CourseBrowserDialog(tk.Toplevel):
     """从服务器拉取课程列表，勾选后添加到选课池"""
 
-    def __init__(self, parent, conf):
+    def __init__(self, parent, conf, unfilled_only=False):
         super().__init__(parent)
         self.title("浏览课程 — 正在加载…")
         self.geometry("1050x750")
@@ -199,6 +199,7 @@ class CourseBrowserDialog(tk.Toplevel):
         self._all: list[tuple] = []
         self._conf = conf
         self._q: queue.Queue = queue.Queue()
+        self._unfilled_only = unfilled_only
 
         self._build()
         _center_win(self, parent)
@@ -222,6 +223,10 @@ class CourseBrowserDialog(tk.Toplevel):
         se.pack(side=LEFT, padx=(4, 8))
         ttk.Label(top, text="课程号 / 课程名 / 教师",
                   foreground=C.TEXT_DIS, font=("", 9)).pack(side=LEFT)
+
+        self.v_unfilled = tk.BooleanVar(value=self._unfilled_only)
+        ttk.Checkbutton(top, text="只显示未满课程", variable=self.v_unfilled,
+                        bootstyle="info", command=self._apply_filter).pack(side=LEFT, padx=(16, 0))
 
         self.status = ttk.Label(top, text="正在加载…",
                                 foreground=C.TEXT_SEC, font=("", 9))
@@ -265,9 +270,9 @@ class CourseBrowserDialog(tk.Toplevel):
         ttk.Button(bf, text="取消", bootstyle="secondary",
                    command=self._close).pack(side=RIGHT, padx=(6, 0))
         ttk.Button(bf, text="全不选", bootstyle="secondary-outline",
-                   command=self._none).pack(side=RIGHT, padx=(6, 0))
+                   command=self._mark_none).pack(side=RIGHT, padx=(6, 0))
         ttk.Button(bf, text="全选", bootstyle="secondary-outline",
-                   command=self._all).pack(side=RIGHT)
+                   command=self._mark_all).pack(side=RIGHT)
 
     # ── 后台拉取 ──
 
@@ -318,24 +323,48 @@ class CourseBrowserDialog(tk.Toplevel):
                 f"{i.get('numberOfSelected', '?')}/{i.get('classCapacity', '?')}",
                 cat,
             ))
-        self._refresh(self._all)
-        self.status.config(text=f"共 {len(self._all)} 门课程",
-                          foreground=C.SUCCESS)
+        self._filter()
 
     def _refresh(self, rows):
         self.tree.delete(*self.tree.get_children())
         for r in rows:
             self.tree.insert("", END, values=r[:7], tags=(str(r[7]),))
 
-    # ── 搜索 ──
+    # ── 搜索 / 过滤 ──
+
+    def _apply_filter(self):
+        """复选框变化时重新过滤"""
+        self._filter()
 
     def _filter(self):
+        rows = self._all
+        # 未满过滤
+        if self.v_unfilled.get():
+            rows = [r for r in rows if self._is_unfilled(r)]
+        # 关键字搜索
         kw = self.search_var.get().strip().lower()
-        if not kw:
-            self._refresh(self._all); return
-        self._refresh([r for r in self._all
-                       if kw in r[2].lower() or kw in r[4].lower()
-                       or kw in r[5].lower()])
+        if kw:
+            rows = [r for r in rows
+                    if kw in r[2].lower() or kw in r[4].lower()
+                    or kw in r[5].lower()]
+        self._refresh(rows)
+        if not self._all:
+            return
+        if len(rows) == len(self._all):
+            self.status.config(text=f"共 {len(self._all)} 门课程",
+                              foreground=C.SUCCESS)
+        else:
+            self.status.config(text=f"显示 {len(rows)}/{len(self._all)} 门课程",
+                              foreground=C.SUCCESS)
+
+    @staticmethod
+    def _is_unfilled(r):
+        """判断课程是否未满（r[6] 格式为 '已选/容量'）"""
+        try:
+            parts = str(r[6]).split("/")
+            return int(parts[0]) < int(parts[1])
+        except (ValueError, IndexError):
+            return True
 
     # ── 勾选 ──
 
@@ -357,13 +386,13 @@ class CourseBrowserDialog(tk.Toplevel):
             self.tree.item(i, values=v)
         self._count()
 
-    def _all(self):
+    def _mark_all(self):
         for i in self.tree.get_children():
             v = list(self.tree.item(i, "values")); v[0] = "✔"
             self.tree.item(i, values=v)
         self._count()
 
-    def _none(self):
+    def _mark_none(self):
         for i in self.tree.get_children():
             v = list(self.tree.item(i, "values")); v[0] = ""
             self.tree.item(i, values=v)
@@ -490,7 +519,9 @@ class Application:
         ttk.Button(bf, text="全不选", bootstyle="secondary-outline",
                    command=self._sel_none).pack(side=LEFT, padx=(0, 6))
         ttk.Button(bf, text="📋 浏览课程", bootstyle="info-outline",
-                   command=self._browse).pack(side=LEFT)
+                   command=self._browse).pack(side=LEFT, padx=(0, 6))
+        ttk.Button(bf, text="⚡ 添加未满课程", bootstyle="success-outline",
+                   command=self._browse_unfilled).pack(side=LEFT)
         self.lbl_cnt = ttk.Label(bf, text="共 0 门课",
                                  foreground=C.TEXT_SEC, font=("", 9))
         self.lbl_cnt.pack(side=RIGHT)
@@ -557,12 +588,13 @@ class Application:
             self.tree.insert("", END, values=(ct, r["KCH"], r["KXH"], r["KCM"]))
             self._cnt(); self._log(f"已添加：{r['KCH']} {r['KXH']}（{ct}）")
 
-    def _browse(self):
+    def _browse(self, unfilled_only=False):
         conf = self._mk_conf()
         if not conf["data"]["loginname"] or not conf["data"]["password"]:
             messagebox.showwarning("提示", "请先填写学号和密码"); return
         self._save()
-        d = CourseBrowserDialog(self.root, conf); self.root.wait_window(d)
+        d = CourseBrowserDialog(self.root, conf, unfilled_only=unfilled_only)
+        self.root.wait_window(d)
         seen = {(self.tree.item(i, "values")[1], self.tree.item(i, "values")[2])
                 for i in self.tree.get_children()}
         n = 0
@@ -574,6 +606,9 @@ class Application:
             seen.add((c["KCH"], c["KXH"])); n += 1
         if n:
             self._cnt(); self._log(f"从课程列表添加了 {n} 门课程")
+
+    def _browse_unfilled(self):
+        self._browse(unfilled_only=True)
 
     def _del_course(self):
         sel = self.tree.selection()
