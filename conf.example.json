@@ -4,20 +4,7 @@
   "batch_name": "第一轮正选（国际创新周）",
   "bx_or_xx": 0,
   "bx": [],
-  "xx": [
-    {
-      "KCH": "24TS1218"
-    },
-    {
-      "KCH": "24TS1256"
-    },
-    {
-      "KCH": "24EE7002"
-    },
-    {
-      "KCH": "24TS2284"
-    }
-  ],
+  "xx": [],
   "data": {
     "loginname": "",
     "password": "",
