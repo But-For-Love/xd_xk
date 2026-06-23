@@ -485,6 +485,10 @@ class Application:
                    command=self._add_course).pack(side=LEFT, padx=(0, 6))
         ttk.Button(bf, text="－ 删除选中", bootstyle="danger-outline",
                    command=self._del_course).pack(side=LEFT, padx=(0, 6))
+        ttk.Button(bf, text="全选", bootstyle="secondary-outline",
+                   command=self._sel_all).pack(side=LEFT, padx=(0, 6))
+        ttk.Button(bf, text="全不选", bootstyle="secondary-outline",
+                   command=self._sel_none).pack(side=LEFT, padx=(0, 6))
         ttk.Button(bf, text="📋 浏览课程", bootstyle="info-outline",
                    command=self._browse).pack(side=LEFT)
         self.lbl_cnt = ttk.Label(bf, text="共 0 门课",
@@ -579,6 +583,12 @@ class Application:
             self.tree.delete(it)
             self._log(f"已删除：{v[1]} {v[2]}")
         self._cnt()
+
+    def _sel_all(self):
+        self.tree.selection_set(self.tree.get_children())
+
+    def _sel_none(self):
+        self.tree.selection_remove(self.tree.get_children())
 
     def _edit_course(self, e):
         it = self.tree.identify_row(e.y)
