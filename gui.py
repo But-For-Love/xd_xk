@@ -548,6 +548,18 @@ class Application:
         ttk.Checkbutton(f, text="连续重试", variable=self.v_always,
                         bootstyle="secondary-round-toggle").pack(side=LEFT, padx=(16, 0))
 
+        # 捡漏区
+        sep = ttk.Separator(f, orient=VERTICAL)
+        sep.pack(side=LEFT, fill=Y, padx=(16, 12))
+        self.v_snipe_cat = tk.StringVar(value="选修")
+        self.cb_snipe_cat = ttk.Combobox(f, textvariable=self.v_snipe_cat,
+                                          values=["必修", "选修"],
+                                          state="readonly", width=6)
+        self.cb_snipe_cat.pack(side=LEFT, padx=(0, 6))
+        self.btn_snipe = ttk.Button(f, text="🎯 捡漏", bootstyle="success",
+                                     command=self._start_snipe)
+        self.btn_snipe.pack(side=LEFT)
+
     # ────────────── 日志区 ──────────────
 
     def _build_log(self):
@@ -736,12 +748,14 @@ class Application:
     # ════════════════════════════════════════════════════════════
 
     def _disable(self):
-        for b in (self.btn_sel, self.btn_drop, self.btn_chk):
+        for b in (self.btn_sel, self.btn_drop, self.btn_chk, self.btn_snipe):
             b.config(state=DISABLED)
+        self.cb_snipe_cat.config(state=DISABLED)
 
     def _enable(self):
-        for b in (self.btn_sel, self.btn_drop, self.btn_chk):
+        for b in (self.btn_sel, self.btn_drop, self.btn_chk, self.btn_snipe):
             b.config(state=NORMAL)
+        self.cb_snipe_cat.config(state="readonly")
 
     # ════════════════════════════════════════════════════════════
     #  选课
@@ -922,6 +936,93 @@ class Application:
             self._log_err(e)
         except Exception as e:
             self._log_err(f"容量检查出错：{type(e).__name__}: {e}")
+        finally:
+            self.msg_q.put(("done", ""))
+
+    # ════════════════════════════════════════════════════════════
+    #  捡漏
+    # ════════════════════════════════════════════════════════════
+
+    def _start_snipe(self):
+        conf = self._mk_conf()
+        if not conf["data"]["loginname"] or not conf["data"]["password"]:
+            messagebox.showwarning("提示", "请先填写学号和密码"); return
+        self._save()
+        self.stop_ev.clear(); self.running = True
+        self._disable(); self.btn_stop.config(state=NORMAL)
+        cat = 0 if self.v_snipe_cat.get() == "必修" else 1
+        self._log(f"── 开始捡漏（{self.v_snipe_cat.get()}，5~10s 一轮）──")
+        threading.Thread(target=self._w_snipe, args=(conf, cat), daemon=True).start()
+
+    def _w_snipe(self, conf, cat):
+        try:
+            self.msg_q.put(("log", "正在登录…"))
+            jd, ck = login(conf, log_func=self._log_cb)
+            ba = show_msg(jd, log_func=self._log_cb,
+                          batch_name=conf.get("batch_name", "第一轮正选（国际创新周）"))
+            self.msg_q.put(("log", f"选课批次 code：{ba}"))
+
+            added = set()   # 已选上的课程 key，避免重复选
+            k = 0
+            while not self.stop_ev.is_set():
+                k += 1
+                rows = get_class(jd, conf, batch=ba, category=cat) \
+                    .get("data", {}).get("rows", [])
+                found_any = False
+
+                if cat == 1:
+                    for i in rows:
+                        if self.stop_ev.is_set():
+                            break
+                        sel = int(i.get("numberOfSelected", 0))
+                        cap = int(i.get("classCapacity", 0))
+                        if sel >= cap:
+                            continue
+                        key = i.get("KCH", "")
+                        if key in added:
+                            continue
+                        found_any = True
+                        self.msg_q.put(("log",
+                            f"  ✦ 发现空位 → {i.get('KCM', '')} ({sel}/{cap})"))
+                        add(jd, i, ck, ba, category=1, always=0,
+                            log_func=self._log_cb, stop_event=self.stop_ev)
+                        added.add(key)
+                else:
+                    for i in rows:
+                        if self.stop_ev.is_set():
+                            break
+                        for j in i.get("tcList", []):
+                            if self.stop_ev.is_set():
+                                break
+                            sel = int(j.get("numberOfSelected", 0))
+                            cap = int(j.get("classCapacity", 0))
+                            if sel >= cap:
+                                continue
+                            key = (j.get("KCH", ""), j.get("KXH", ""))
+                            if key in added:
+                                continue
+                            found_any = True
+                            self.msg_q.put(("log",
+                                f"  ✦ 发现空位 → {j.get('KCM', '')} "
+                                f"{j.get('KXH', '')} ({sel}/{cap})"))
+                            add(jd, j, ck, ba, category=0, always=0,
+                                log_func=self._log_cb, stop_event=self.stop_ev)
+                            added.add(key)
+
+                status = f"已抢 {len(added)} 门" if added else "暂无空位"
+                self.msg_q.put(("log",
+                    f"第 {k} 轮检查 ━ {status} ━{'━' * min(k, 20)}"))
+                k = k % 10
+
+                if not found_any and not added:
+                    time.sleep(8)
+                else:
+                    time.sleep(5)
+
+        except RuntimeError as e:
+            self._log_err(e)
+        except Exception as e:
+            self._log_err(f"捡漏出错：{type(e).__name__}: {e}")
         finally:
             self.msg_q.put(("done", ""))
 
