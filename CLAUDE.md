@@ -32,7 +32,7 @@ Course details and credentials are configured in `conf.json`. Credentials can al
 
 **Source files:**
 
-- `gui.py` — GUI 入口（tkinter）。包含 `Application` 主界面类和 `AddCourseDialog` 添加课程对话框。通过 `threading` + `queue.Queue` 实现后台网络操作与界面日志的线程安全通信。
+- `gui.py` — GUI 入口（tkinter + ttkbootstrap）。包含 `Application` 主界面类、`AddCourseDialog`（手动输入课程）、`CourseBrowserDialog`（从服务器拉取课程列表勾选添加）。所有网络操作在 `threading.Thread(daemon=True)` 中执行，通过 `queue.Queue` + `root.after(80ms)` 轮询实现线程安全的 UI 更新。
 - `xk_main.py` — 命令行入口。Contains `main()` (reads `conf.json`), `add_1()`/`del_1()` (programmatic add/drop with custom course lists), and `check()` (capacity polling loop). The `if __name__` block toggles between `main()` and `add_1()`/`del_1()` by commenting/uncommenting.
 - `func.py` — All HTTP interactions: `login()`, `get_captcha()`, `show_msg()`, `get_class()`, `add()`, `dele()`. 支持可选的 `log_func` 回调和 `stop_event` 停止信号，GUI 和命令行共用。
 - `encrypt.py` — AES-ECB encryption with PKCS7 padding for password field. Key is hardcoded as `MWMqg2tPcDkxcm11`. `aes_decrypt` is broken (uses CBC mode incorrectly).
@@ -63,3 +63,5 @@ Course details and credentials are configured in `conf.json`. Credentials can al
 - `check()` is hardcoded for specific elective course codes — edit the list before use.
 - `encrypt.py` 的 `aes_decrypt` 方法不可用（错误使用了 CBC 模式），只有 `AES_encrypt` 是正确的。
 - `conf.json` is gitignored. Use `conf.example.json` as a template. Never commit real credentials.
+- 课程数据结构差异：必修课需通过 `tcList` 数组按 `KXH` 匹配具体教学班；选修课直接在 `rows` 层级按 `KCH` 匹配，无需进入 `tcList`。
+- GUI 的 `CourseBrowserDialog` 和 `Application._w_sel`/`_w_drop`/`_w_chk` 均在后台线程中执行网络请求，通过 `msg_q.put(("log"|"err"|"done", msg))` 与主线程通信。修改网络逻辑时保持此模式。
