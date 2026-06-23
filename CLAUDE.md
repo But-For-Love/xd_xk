@@ -40,6 +40,7 @@ Course details and credentials are configured in `conf.json`. Credentials can al
 **Config (`conf.json`):**
 - `ocr_captcha`: `"1"` for auto OCR, `"0"` for manual captcha input
 - `debug`: `"1"` to dump raw API responses to JSON files
+- `batch_name`: 选课批次名称关键字，用于自动匹配当前开放批次（如 `"第一轮正选（国际创新周）"`）
 - `bx_or_xx`: `0` = 必修 (required courses, `FANKC`), `1` = 选修 (elective courses, `XGKC`)
 - `bx[]`: required course list — needs both `KCH` (course code) and `KXH` (section number)
 - `xx[]`: elective course list — only needs `KCH`
@@ -56,8 +57,9 @@ Course details and credentials are configured in `conf.json`. Credentials can al
 
 ## Important Details
 
-- The batch code (选课批次) is extracted from login response by matching `"2025级"` in `show_msg()` — update this string for different grade years (`func.py:90`).
-- `add()` and `dele()` retry in a 1-second loop when `always=1`, printing status each iteration.
+- `show_msg()` uses `batch_name` from config to match the 选课批次 — defaults to `"2025级"` if not provided. Update `batch_name` in `conf.json` for different grade years or selection rounds.
+- `add()` and `dele()` retry in a 1-second loop when `always=1`, printing status each iteration. Both accept an optional `stop_event` (`threading.Event`) to interrupt the retry loop.
 - Required courses (`bx`) need `KXH` (section number); electives (`xx`) do not.
 - `check()` is hardcoded for specific elective course codes — edit the list before use.
-- `conf.json` currently contains real credentials in the repo (student `25039100623`).
+- `encrypt.py` 的 `aes_decrypt` 方法不可用（错误使用了 CBC 模式），只有 `AES_encrypt` 是正确的。
+- `conf.json` is gitignored. Use `conf.example.json` as a template. Never commit real credentials.

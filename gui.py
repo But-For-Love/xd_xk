@@ -402,8 +402,8 @@ class Application:
     def __init__(self, root: ttk.Window):
         self.root = root
         self.root.title("西电自动选课工具")
-        self.root.geometry("740x660")
-        self.root.minsize(640, 540)
+        self.root.geometry("900x780")
+        self.root.minsize(800, 680)
 
         self.msg_q: queue.Queue = queue.Queue()
         self.stop_ev = threading.Event()
@@ -520,7 +520,7 @@ class Application:
         card.pack(fill=BOTH, padx=16, pady=(4, 8), expand=False)
 
         self.log = tk.Text(
-            card, height=9, wrap="word",
+            card, height=14, wrap="word",
             font=("Cascadia Code", 9),
             bg=C.LOG_BG, fg=C.LOG_FG,
             insertbackground=C.LOG_FG,
@@ -904,8 +904,8 @@ if __name__ == "__main__":
     root = ttk.Window(
         title="西电自动选课工具",
         themename="cosmo",       # Fluent 浅色主题
-        size=(740, 660),
-        minsize=(640, 540),
+        size=(900, 780),
+        minsize=(800, 680),
     )
     app = Application(root)
     root.mainloop()
