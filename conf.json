@@ -1,24 +1,25 @@
 {
   "ocr_captcha": "1",
   "debug": "0",
+  "batch_name": "第一轮正选（国际创新周）",
   "bx_or_xx": 0,
-  "bx": [
-    {
-      "KCH": "TE204004",
-      "KXH": "06"
-    },
-    {
-      "KCH": "TE204004",
-      "KXH": "07"
-    }
-  ],
+  "bx": [],
   "xx": [
     {
-      "KCH": "FL006066"
+      "KCH": "24TS1218"
+    },
+    {
+      "KCH": "24TS1256"
+    },
+    {
+      "KCH": "24EE7002"
+    },
+    {
+      "KCH": "24TS2284"
     }
   ],
   "data": {
-    "loginname": "20009100501",
+    "loginname": "",
     "password": "",
     "captcha": "xxxx",
     "uuid": "xxxx"
