@@ -788,6 +788,8 @@ class Application:
         if d.selected:
             self.v_batch.set(d.selected)
             self._log(f"已选择批次：{d.selected}")
+
+    def _mk_conf(self):
         return {
             "ocr_captcha": "1" if self.v_ocr.get() else "0",
             "debug": "1" if self.v_dbg.get() else "0",
