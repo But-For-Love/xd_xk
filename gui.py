@@ -45,7 +45,7 @@ class C:
 
 _DEFAULT_CONF = {
     "ocr_captcha": "1", "debug": "0",
-    "batch_name": "第一轮正选（国际创新周）",
+    "batch_name": "第二轮补选（国际创新周）",
     "bx_or_xx": 0, "bx": [], "xx": [],
     "data": {"loginname": "", "password": "", "captcha": "xxxx", "uuid": "xxxx"},
 }
@@ -60,7 +60,7 @@ def load_conf():
 
 
 def save_conf(loginname, password, ocr, debug, courses,
-              batch_name="第一轮正选（国际创新周）"):
+              batch_name="第二轮补选（国际创新周）"):
     bx = [{"KCH": c["KCH"], "KXH": c.get("KXH", ""), "KCM": c.get("KCM", "")}
           for c in courses if c["category"] == 0]
     xx = [{"KCH": c["KCH"], "KXH": c.get("KXH", ""), "KCM": c.get("KCM", "")}
@@ -281,9 +281,10 @@ class CourseBrowserDialog(tk.Toplevel):
         try:
             batch_name = self._conf.get("batch_name", "第一轮正选（国际创新周）")
             self._q.put(("st", "正在登录…"))
-            jd, ck = login(self._conf, log_func=lambda _: None)
+            jd, ck = login(self._conf, log_func=lambda m: self._q.put(("st", m)))
             self._q.put(("st", f"正在匹配批次：{batch_name}"))
-            ba = show_msg(jd, log_func=lambda _: None, batch_name=batch_name)
+            ba = show_msg(jd, log_func=lambda m: self._q.put(("st", m)),
+                          batch_name=batch_name)
             self._q.put(("st", f"已匹配批次 code：{ba}，正在获取课程…"))
 
             rows = []
