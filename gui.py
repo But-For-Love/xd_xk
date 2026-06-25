@@ -201,6 +201,7 @@ class CourseBrowserDialog(tk.Toplevel):
         self._conf = conf
         self._q: queue.Queue = queue.Queue()
         self._unfilled_only = unfilled_only
+        self._log_lines: list[str] = []
 
         self._build()
         _center_win(self, parent)
@@ -305,9 +306,15 @@ class CourseBrowserDialog(tk.Toplevel):
                 k, d = self._q.get_nowait()
                 if k == "st":
                     self.status.config(text=d)
+                    self._log_lines.append(str(d))
+                    # 保留最近 20 条日志
+                    if len(self._log_lines) > 20:
+                        self._log_lines.pop(0)
                 elif k == "err":
                     self.status.config(text="加载失败", foreground=C.DANGER)
-                    messagebox.showerror("加载失败", str(d), parent=self)
+                    detail = "\n".join(self._log_lines[-10:]) if self._log_lines else ""
+                    msg = f"{d}\n\n--- 近期日志 ---\n{detail}" if detail else str(d)
+                    messagebox.showerror("加载失败", msg, parent=self)
                 elif k == "ok":
                     self._fill(d)
                     batch = self._conf.get("batch_name", "")
