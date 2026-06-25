@@ -433,6 +433,67 @@ class CourseBrowserDialog(tk.Toplevel):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  对话框 · 选择选课批次
+# ═══════════════════════════════════════════════════════════════
+
+class BatchSelectDialog(tk.Toplevel):
+    """显示可选批次列表，用户点击选择"""
+
+    def __init__(self, parent, batches):
+        """
+        :param batches: list of {"name": str, "canSelect": "0"|"1"}
+        """
+        super().__init__(parent)
+        self.title("选择选课批次")
+        self.resizable(False, False)
+        self.grab_set()
+        self.configure(bg=C.BG)
+        self.selected = None
+
+        self._batches = batches
+        self._build()
+        _center_win(self, parent)
+
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.bind("<Escape>", lambda e: self._cancel())
+
+    def _build(self):
+        ttk.Label(self, text="点击选择要使用的选课批次：",
+                  foreground=C.TEXT_SEC, font=("", 10)).pack(padx=16, pady=(16, 8))
+
+        frame = ttk.Frame(self)
+        frame.pack(fill=BOTH, expand=True, padx=16, pady=(0, 8))
+
+        for b in self._batches:
+            name = b["name"]
+            can = b["canSelect"] == "1"
+            state = "已开放" if can else "未开放"
+            color = C.SUCCESS if can else C.TEXT_DIS
+            btn_text = f"{name}  [{state}]"
+
+            row = ttk.Frame(frame)
+            row.pack(fill=X, pady=2)
+            btn = ttk.Button(row, text=btn_text, bootstyle="info-outline" if can else "secondary-outline",
+                             command=lambda n=name: self._pick(n))
+            btn.pack(side=LEFT, fill=X, expand=True)
+            if not can:
+                btn.config(state=DISABLED)
+
+        bf = ttk.Frame(self)
+        bf.pack(fill=X, padx=16, pady=(4, 16))
+        ttk.Button(bf, text="取消", bootstyle="secondary",
+                   command=self._cancel).pack(side=RIGHT)
+
+    def _pick(self, name):
+        self.selected = name
+        self.destroy()
+
+    def _cancel(self):
+        self.selected = None
+        self.destroy()
+
+
+# ═══════════════════════════════════════════════════════════════
 #  主界面
 # ═══════════════════════════════════════════════════════════════
 
@@ -494,6 +555,8 @@ class Application:
         ttk.Label(r2, text="选课批次").pack(side=LEFT)
         self.v_batch = tk.StringVar(value="第一轮正选（国际创新周）")
         ttk.Entry(r2, textvariable=self.v_batch, width=42).pack(side=LEFT, padx=(4, 8))
+        ttk.Button(r2, text="获取批次", bootstyle="info-outline",
+                   command=self._fetch_batches).pack(side=LEFT, padx=(0, 8))
         ttk.Label(r2, text="匹配批次名称关键字",
                   foreground=C.TEXT_DIS, font=("", 9)).pack(side=LEFT)
 
@@ -697,7 +760,34 @@ class Application:
                   self.v_ocr.get(), self.v_dbg.get(), self._courses(),
                   self.v_batch.get().strip())
 
-    def _mk_conf(self):
+    def _fetch_batches(self):
+        conf = self._mk_conf()
+        if not conf["data"]["loginname"] or not conf["data"]["password"]:
+            messagebox.showwarning("提示", "请先填写学号和密码"); return
+        self._log("正在获取选课批次…")
+        threading.Thread(target=self._w_fetch_batches, args=(conf,), daemon=True).start()
+
+    def _w_fetch_batches(self, conf):
+        try:
+            jd, ck = login(conf, log_func=self._log_cb)
+            resp = jd
+            student = resp["data"]["student"]
+            lst = student.get("electiveBatchList", [])
+            if not lst:
+                self.msg_q.put(("err", "没有可用的选课批次"))
+                return
+            self.root.after(0, self._show_batch_dialog, lst)
+        except RuntimeError as e:
+            self._log_err(e)
+        except Exception as e:
+            self._log_err(f"获取批次出错：{type(e).__name__}: {e}")
+
+    def _show_batch_dialog(self, batches):
+        d = BatchSelectDialog(self.root, batches)
+        self.root.wait_window(d)
+        if d.selected:
+            self.v_batch.set(d.selected)
+            self._log(f"已选择批次：{d.selected}")
         return {
             "ocr_captcha": "1" if self.v_ocr.get() else "0",
             "debug": "1" if self.v_dbg.get() else "0",
