@@ -189,7 +189,8 @@ class CourseBrowserDialog(tk.Toplevel):
 
     def __init__(self, parent, conf, unfilled_only=False):
         super().__init__(parent)
-        self.title("浏览课程 — 正在加载…")
+        batch = conf.get("batch_name", "（未设置）")
+        self.title(f"浏览课程 — 批次：{batch} — 正在加载…")
         self.geometry("1050x750")
         self.minsize(900, 600)
         self.grab_set()
@@ -278,10 +279,12 @@ class CourseBrowserDialog(tk.Toplevel):
 
     def _fetch(self):
         try:
+            batch_name = self._conf.get("batch_name", "第一轮正选（国际创新周）")
             self._q.put(("st", "正在登录…"))
             jd, ck = login(self._conf, log_func=lambda _: None)
-            ba = show_msg(jd, log_func=lambda _: None,
-                          batch_name=self._conf.get("batch_name", "第一轮正选（国际创新周）"))
+            self._q.put(("st", f"正在匹配批次：{batch_name}"))
+            ba = show_msg(jd, log_func=lambda _: None, batch_name=batch_name)
+            self._q.put(("st", f"已匹配批次 code：{ba}，正在获取课程…"))
 
             rows = []
             for cat in (0, 1):
@@ -306,7 +309,8 @@ class CourseBrowserDialog(tk.Toplevel):
                     messagebox.showerror("加载失败", str(d), parent=self)
                 elif k == "ok":
                     self._fill(d)
-                    self.title("浏览课程 — 勾选后添加到选课池")
+                    batch = self._conf.get("batch_name", "")
+                    self.title(f"浏览课程 — 批次：{batch} — 勾选后添加到选课池")
         except queue.Empty:
             pass
         if self.winfo_exists():
@@ -605,6 +609,7 @@ class Application:
         if not conf["data"]["loginname"] or not conf["data"]["password"]:
             messagebox.showwarning("提示", "请先填写学号和密码"); return
         self._save()
+        self._log(f"浏览课程 — 批次：{conf.get('batch_name', '（未设置）')}")
         d = CourseBrowserDialog(self.root, conf, unfilled_only=unfilled_only)
         self.root.wait_window(d)
         seen = {(self.tree.item(i, "values")[1], self.tree.item(i, "values")[2])
