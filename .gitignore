@@ -7,7 +7,6 @@ build/
 *.spec
 
 # uv
-uv.lock
 .venv/
 
 # Ruff
