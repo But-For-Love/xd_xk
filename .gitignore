@@ -1,11 +1,25 @@
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.spec
+
+# uv
+uv.lock
+.venv/
+
+# Ruff
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Project
 conf.json
 captcha_pac.json
 login_pac.json
 batch_pac.json
 classlist.json
-build/
-dist/
-*.spec
