@@ -19,7 +19,7 @@ from typing import Any
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-from xd_xk.core import CourseSession, add, dele, get_batch_list, get_class, login
+from xd_xk.core import CourseSession, add, dele, fetch_courses, get_batch_list, get_class, login
 
 CONF_PATH = Path("conf.json")
 
@@ -134,54 +134,6 @@ def _center_win(child: tk.Toplevel, parent: tk.Widget) -> None:
     x = parent.winfo_x() + (parent.winfo_width() - w) // 2
     y = parent.winfo_y() + (parent.winfo_height() - h) // 2
     child.geometry(f"+{x}+{y}")
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  工作流辅助（消除 5 处重复的登录→匹配→拉课程）
-# ═══════════════════════════════════════════════════════════════════
-
-
-def _prepare_session(
-    conf: dict[str, Any],
-    msg_q: queue.Queue,
-    log_cb: Any,
-) -> CourseSession | None:
-    """登录→匹配批次，通过 msg_q 报告进度.
-
-    此前这一流程在 _w_sel / _w_drop / _w_chk / _w_snipe / _fetch
-    中重复了 5 次，现在统一为一行调用.
-    """
-    msg_q.put(Msg("log", "正在登录…"))
-    try:
-        return CourseSession.create(conf, log_func=log_cb)
-    except RuntimeError:
-        raise  # 由调用方统一 try/except
-    except Exception as e:
-        raise RuntimeError(f"准备会话出错：{type(e).__name__}: {e}")
-
-
-def _fetch_courses(
-    session: CourseSession,
-    conf: dict[str, Any],
-    categories: set[int],
-    msg_q: queue.Queue,
-) -> dict[int, list[dict]]:
-    """拉取指定类别的课程列表."""
-    rows_by_cat: dict[int, list[dict]] = {}
-    for cat in categories:
-        cat_name = "必修" if cat == 0 else "选修"
-        msg_q.put(Msg("log", f"正在获取{cat_name}课程列表…"))
-        resp = get_class(session.data, conf, batch=session.batch_code, category=cat)
-        rows = resp.get("data", {}).get("rows", [])
-        rows_by_cat[cat] = rows
-        msg_q.put(Msg("log", f"  {cat_name}：{len(rows)} 门"))
-        api_code = resp.get("code", "?")
-        api_msg = resp.get("msg", "")
-        if api_code != 200:
-            msg_q.put(Msg("log", f"  [WARN] API code={api_code}, msg={api_msg}"))
-        sample = [r.get("KCH", "?") for r in rows[:5]]
-        msg_q.put(Msg("log", f"  API 返回课程号示例：{sample}"))
-    return rows_by_cat
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -427,27 +379,23 @@ class CourseBrowserDialog(tk.Toplevel):
             command=self._mark_all,
         ).pack(side=RIGHT)
 
-    # ── 后台拉取（使用 _prepare_session 消除重复）──
+    # ── 后台拉取 ──
 
     def _fetch(self) -> None:
         try:
-            session = _prepare_session(
+            self._q.put(Msg("st", "正在登录…"))
+            session = CourseSession.create(
                 self._conf,
-                self._q,
-                log_cb=lambda m: self._q.put(Msg("st", m)),
+                log_func=lambda m: self._q.put(Msg("st", m)),
             )
-            if session is None:
-                return
             self._q.put(Msg("st", f"已匹配批次 code：{session.batch_code}，正在获取课程…"))
 
             rows: list[tuple[int, dict]] = []
-            for cat in (0, 1):
-                self._q.put(Msg("st", f"正在获取{'必修' if cat == 0 else '选修'}课程…"))
-                for course in (
-                    get_class(session.data, self._conf, batch=session.batch_code, category=cat)
-                    .get("data", {})
-                    .get("rows", [])
-                ):
+            courses_by_cat = fetch_courses(
+                session.data, self._conf, session.batch_code, {0, 1},
+            )
+            for cat, course_list in courses_by_cat.items():
+                for course in course_list:
                     rows.append((cat, course))
             self._q.put(Msg("ok", rows))
         except RuntimeError as e:
@@ -1191,7 +1139,7 @@ class Application:
         self.cb_snipe_cat.config(state="readonly")
 
     # ════════════════════════════════════════════════════════════════
-    #  选课（使用 _prepare_session 消除重复）
+    #  选课
     # ════════════════════════════════════════════════════════════════
 
     def _start_sel(self) -> None:
@@ -1219,13 +1167,18 @@ class Application:
         always: int,
     ) -> None:
         try:
-            session = _prepare_session(conf, self.msg_q, self._log_cb)
-            if session is None:
-                return
+            self.msg_q.put(Msg("log", "正在登录…"))
+            session = CourseSession.create(conf, log_func=self._log_cb)
             self.msg_q.put(Msg("log", f"选课批次 code：{session.batch_code}"))
 
             need_cats = {c["category"] for c in cs}
-            rows_by_cat = _fetch_courses(session, conf, need_cats, self.msg_q)
+            for cat in need_cats:
+                name = "必修" if cat == 0 else "选修"
+                self.msg_q.put(Msg("log", f"正在获取{name}课程列表…"))
+            rows_by_cat = fetch_courses(session.data, conf, session.batch_code, need_cats)
+            for cat, rows in rows_by_cat.items():
+                name = "必修" if cat == 0 else "选修"
+                self.msg_q.put(Msg("log", f"  {name}：{len(rows)} 门"))
 
             for c in cs:
                 if self.stop_ev.is_set():
@@ -1310,13 +1263,18 @@ class Application:
         always: int,
     ) -> None:
         try:
-            session = _prepare_session(conf, self.msg_q, self._log_cb)
-            if session is None:
-                return
+            self.msg_q.put(Msg("log", "正在登录…"))
+            session = CourseSession.create(conf, log_func=self._log_cb)
             self.msg_q.put(Msg("log", f"选课批次 code：{session.batch_code}"))
 
             need_cats = {c["category"] for c in cs}
-            rows_by_cat = _fetch_courses(session, conf, need_cats, self.msg_q)
+            for cat in need_cats:
+                name = "必修" if cat == 0 else "选修"
+                self.msg_q.put(Msg("log", f"正在获取{name}课程列表…"))
+            rows_by_cat = fetch_courses(session.data, conf, session.batch_code, need_cats)
+            for cat, rows in rows_by_cat.items():
+                name = "必修" if cat == 0 else "选修"
+                self.msg_q.put(Msg("log", f"  {name}：{len(rows)} 门"))
 
             for c in cs:
                 if self.stop_ev.is_set():
@@ -1399,9 +1357,8 @@ class Application:
         cs: list[dict[str, Any]],
     ) -> None:
         try:
-            session = _prepare_session(conf, self.msg_q, self._log_cb)
-            if session is None:
-                return
+            self.msg_q.put(Msg("log", "正在登录…"))
+            session = CourseSession.create(conf, log_func=self._log_cb)
             self.msg_q.put(Msg("log", f"选课批次 code：{session.batch_code}"))
             kset = {c["KCH"] for c in cs}
             k = 0
@@ -1464,9 +1421,8 @@ class Application:
 
     def _w_snipe(self, conf: dict[str, Any], cat: int) -> None:
         try:
-            session = _prepare_session(conf, self.msg_q, self._log_cb)
-            if session is None:
-                return
+            self.msg_q.put(Msg("log", "正在登录…"))
+            session = CourseSession.create(conf, log_func=self._log_cb)
             self.msg_q.put(Msg("log", f"选课批次 code：{session.batch_code}"))
 
             added: set[str] = set()

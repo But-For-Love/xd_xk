@@ -394,6 +394,30 @@ def get_class(
     return resp.json()
 
 
+def fetch_courses(
+    data: JsonDict,
+    conf: JsonDict,
+    batch: str,
+    categories: set[int],
+) -> dict[int, list[JsonDict]]:
+    """批量获取指定类别的课程列表.
+
+    Args:
+        data: 登录返回的 json
+        conf: 配置
+        batch: 批次 code
+        categories: 要获取的类别集合，0=必修 1=选修
+
+    Returns:
+        {category: [course_rows], ...}
+    """
+    rows_by_cat: dict[int, list[JsonDict]] = {}
+    for cat in categories:
+        resp = get_class(data, conf, batch=batch, category=cat)
+        rows_by_cat[cat] = resp.get("data", {}).get("rows", [])
+    return rows_by_cat
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  选课 / 退课（模板方法模式 — 提取公共轮询逻辑）
 # ═══════════════════════════════════════════════════════════════════
