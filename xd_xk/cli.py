@@ -11,22 +11,40 @@ from xd_xk.core import add, get_class, login, show_msg
 
 CONF_PATH = Path("conf.json")
 
+# ── 默认扫描的选修课课程号 ─────────────────────────────────────────
+_DEFAULT_KCH = [
+    "EY226022",
+    "EY226023",
+    "EY226024",
+    "EY226025",
+    "EY226026",
+    "EY226027",
+    "EY226028",
+    "EY226029",
+    "EY226030",
+    "EY226031",
+    "EY226032",
+    "EY226035",
+    "EY226036",
+    "EY226037",
+    "EY226038",
+    "EY226039",
+    "EY226041",
+    "EY226042",
+    "EY226043",
+    "EY226044",
+    "EY226045",
+    "EY226046",
+    "EY226047",
+]
+
 
 def _load_conf() -> dict:
     return json.loads(CONF_PATH.read_text(encoding="utf-8"))
 
 
-def cmd_select(args: argparse.Namespace) -> None:
-    """选课命令."""
-    conf = _load_conf()
-    data, _cookie = login(conf)
-    batch = show_msg(data, batch_name=conf.get("batch_name", "2025级"))
-    get_class(data, conf, batch=batch, category=args.category)
-    print("[OK] 登录成功，已获取课程列表")
-
-
-def cmd_drop(args: argparse.Namespace) -> None:
-    """退课命令."""
+def _login_and_fetch(args: argparse.Namespace) -> None:
+    """选课 / 退课共用：登录 → 匹配批次 → 获取课程列表."""
     conf = _load_conf()
     data, _cookie = login(conf)
     batch = show_msg(data, batch_name=conf.get("batch_name", "2025级"))
@@ -36,37 +54,11 @@ def cmd_drop(args: argparse.Namespace) -> None:
 
 def cmd_check(args: argparse.Namespace) -> None:
     """容量检查 — 循环扫描指定课程号，有余量自动选课."""
-    # 默认检查的选修课课程号列表
-    default_kch = [
-        "EY226022",
-        "EY226023",
-        "EY226024",
-        "EY226025",
-        "EY226026",
-        "EY226027",
-        "EY226028",
-        "EY226029",
-        "EY226030",
-        "EY226031",
-        "EY226032",
-        "EY226035",
-        "EY226036",
-        "EY226037",
-        "EY226038",
-        "EY226039",
-        "EY226041",
-        "EY226042",
-        "EY226043",
-        "EY226044",
-        "EY226045",
-        "EY226046",
-        "EY226047",
-    ]
     conf = _load_conf()
     data, cookie = login(conf)
     batch = show_msg(data, batch_name=conf.get("batch_name", "2025级"))
 
-    target_kch = set(args.kch) if args.kch else set(default_kch)
+    target_kch = set(args.kch) if args.kch else set(_DEFAULT_KCH)
     print(f"开始容量检查，目标课程号：{target_kch}")
 
     k = 0
@@ -82,8 +74,7 @@ def cmd_check(args: argparse.Namespace) -> None:
                 if (sel or 0) < (cap or 0):
                     print(course.get("KXH"), course.get("KCM"))
                     add(data, course, cookie, batch, category=1, always=0)
-        print(f"第 {k} 次检查{'━' * min(k, 20)}")
-        k = k % 10
+        print(f"第 {k} 次检查{'━' * min(k % 10 or 10, 20)}")
         time.sleep(0.5)
 
 
@@ -106,10 +97,8 @@ def main() -> None:
     args = parser.parse_args()
 
     match args.command:
-        case "select":
-            cmd_select(args)
-        case "drop":
-            cmd_drop(args)
+        case "select" | "drop":
+            _login_and_fetch(args)
         case "check":
             cmd_check(args)
         case _:

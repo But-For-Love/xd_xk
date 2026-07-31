@@ -11,6 +11,7 @@ import queue
 import threading
 import time
 import tkinter as tk
+from dataclasses import dataclass
 from pathlib import Path
 from tkinter import messagebox
 from typing import Any
@@ -18,9 +19,22 @@ from typing import Any
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-from xd_xk.core import add, dele, get_class, login, show_msg
+from xd_xk.core import CourseSession, add, dele, get_class, login
 
 CONF_PATH = Path("conf.json")
+
+# ═══════════════════════════════════════════════════════════════════
+#  消息协议（值对象 — 替代裸 tuple）
+# ═══════════════════════════════════════════════════════════════════
+
+
+@dataclass(frozen=True)
+class Msg:
+    """线程间消息协议，替代易出错的 ("kind", payload) 裸元组."""
+
+    kind: str  # "log" | "err" | "done" | "st" | "ok"
+    payload: object = ""
+
 
 # ═══════════════════════════════════════════════════════════════════
 #  配色 · Fluent 色板
@@ -120,6 +134,54 @@ def _center_win(child: tk.Toplevel, parent: tk.Widget) -> None:
     x = parent.winfo_x() + (parent.winfo_width() - w) // 2
     y = parent.winfo_y() + (parent.winfo_height() - h) // 2
     child.geometry(f"+{x}+{y}")
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  工作流辅助（消除 5 处重复的登录→匹配→拉课程）
+# ═══════════════════════════════════════════════════════════════════
+
+
+def _prepare_session(
+    conf: dict[str, Any],
+    msg_q: queue.Queue,
+    log_cb: Any,
+) -> CourseSession | None:
+    """登录→匹配批次，通过 msg_q 报告进度.
+
+    此前这一流程在 _w_sel / _w_drop / _w_chk / _w_snipe / _fetch
+    中重复了 5 次，现在统一为一行调用.
+    """
+    msg_q.put(Msg("log", "正在登录…"))
+    try:
+        return CourseSession.create(conf, log_func=log_cb)
+    except RuntimeError:
+        raise  # 由调用方统一 try/except
+    except Exception as e:
+        raise RuntimeError(f"准备会话出错：{type(e).__name__}: {e}")
+
+
+def _fetch_courses(
+    session: CourseSession,
+    conf: dict[str, Any],
+    categories: set[int],
+    msg_q: queue.Queue,
+) -> dict[int, list[dict]]:
+    """拉取指定类别的课程列表."""
+    rows_by_cat: dict[int, list[dict]] = {}
+    for cat in categories:
+        cat_name = "必修" if cat == 0 else "选修"
+        msg_q.put(Msg("log", f"正在获取{cat_name}课程列表…"))
+        resp = get_class(session.data, conf, batch=session.batch_code, category=cat)
+        rows = resp.get("data", {}).get("rows", [])
+        rows_by_cat[cat] = rows
+        msg_q.put(Msg("log", f"  {cat_name}：{len(rows)} 门"))
+        api_code = resp.get("code", "?")
+        api_msg = resp.get("msg", "")
+        if api_code != 200:
+            msg_q.put(Msg("log", f"  [WARN] API code={api_code}, msg={api_msg}"))
+        sample = [r.get("KCH", "?") for r in rows[:5]]
+        msg_q.put(Msg("log", f"  API 返回课程号示例：{sample}"))
+    return rows_by_cat
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -365,52 +427,50 @@ class CourseBrowserDialog(tk.Toplevel):
             command=self._mark_all,
         ).pack(side=RIGHT)
 
-    # ── 后台拉取 ──
+    # ── 后台拉取（使用 _prepare_session 消除重复）──
 
     def _fetch(self) -> None:
         try:
-            batch_name = self._conf.get("batch_name", "第一轮正选（国际创新周）")
-            self._q.put(("st", "正在登录…"))
-            jd, ck = login(self._conf, log_func=lambda m: self._q.put(("st", m)))
-            self._q.put(("st", f"正在匹配批次：{batch_name}"))
-            ba = show_msg(
-                jd,
-                log_func=lambda m: self._q.put(("st", m)),
-                batch_name=batch_name,
+            session = _prepare_session(
+                self._conf,
+                self._q,
+                log_cb=lambda m: self._q.put(Msg("st", m)),
             )
-            self._q.put(("st", f"已匹配批次 code：{ba}，正在获取课程…"))
+            if session is None:
+                return
+            self._q.put(Msg("st", f"已匹配批次 code：{session.batch_code}，正在获取课程…"))
 
             rows: list[tuple[int, dict]] = []
             for cat in (0, 1):
-                self._q.put(("st", f"正在获取{'必修' if cat == 0 else '选修'}课程…"))
+                self._q.put(Msg("st", f"正在获取{'必修' if cat == 0 else '选修'}课程…"))
                 for course in (
-                    get_class(jd, self._conf, batch=ba, category=cat)
+                    get_class(session.data, self._conf, batch=session.batch_code, category=cat)
                     .get("data", {})
                     .get("rows", [])
                 ):
                     rows.append((cat, course))
-            self._q.put(("ok", rows))
+            self._q.put(Msg("ok", rows))
         except RuntimeError as e:
-            self._q.put(("err", str(e)))
+            self._q.put(Msg("err", str(e)))
         except Exception as e:
-            self._q.put(("err", f"{type(e).__name__}: {e}"))
+            self._q.put(Msg("err", f"{type(e).__name__}: {e}"))
 
     def _poll(self) -> None:
         try:
             while True:
-                k, d = self._q.get_nowait()
-                if k == "st":
-                    self.status.config(text=d)
-                    self._log_lines.append(str(d))
+                m: Msg = self._q.get_nowait()
+                if m.kind == "st":
+                    self.status.config(text=str(m.payload))
+                    self._log_lines.append(str(m.payload))
                     if len(self._log_lines) > 20:
                         self._log_lines.pop(0)
-                elif k == "err":
+                elif m.kind == "err":
                     self.status.config(text="加载失败", foreground=C.DANGER)
                     detail = "\n".join(self._log_lines[-10:]) if self._log_lines else ""
-                    msg = f"{d}\n\n--- 近期日志 ---\n{detail}" if detail else str(d)
+                    msg = f"{m.payload}\n\n--- 近期日志 ---\n{detail}" if detail else str(m.payload)
                     messagebox.showerror("加载失败", msg, parent=self)
-                elif k == "ok":
-                    self._fill(d)
+                elif m.kind == "ok":
+                    self._fill(m.payload)  # type: ignore[arg-type]
                     batch = self._conf.get("batch_name", "")
                     self.title(f"浏览课程 — 批次：{batch} — 勾选后添加到选课池")
         except queue.Empty:
@@ -1007,7 +1067,7 @@ class Application:
             student = jd["data"]["student"]
             lst = student.get("electiveBatchList", [])
             if not lst:
-                self.msg_q.put(("err", "没有可用的选课批次"))
+                self.msg_q.put(Msg("err", "没有可用的选课批次"))
                 return
             self.root.after(0, self._show_batch_dialog, lst)
         except RuntimeError as e:
@@ -1047,10 +1107,10 @@ class Application:
         self.log.see(END)
 
     def _log_cb(self, msg: str) -> None:
-        self.msg_q.put(("log", msg))
+        self.msg_q.put(Msg("log", msg))
 
     def _log_err(self, msg: object) -> None:
-        self.msg_q.put(("err", str(msg)))
+        self.msg_q.put(Msg("err", str(msg)))
 
     def _clear_log(self) -> None:
         self.log.delete("1.0", END)
@@ -1058,21 +1118,13 @@ class Application:
     def _poll(self) -> None:
         try:
             while True:
-                k, d = self.msg_q.get_nowait()
-                if k == "log":
-                    t = "info"
-                    s = str(d)
-                    if "操作成功" in s or "已在选课结果" in s or "[OK]" in s:
-                        t = "success"
-                    elif "失败" in s or "错误" in s or "不存在" in s:
-                        t = "error"
-                    elif "冲突" in s:
-                        t = "warn"
-                    self._log(s, t)
-                elif k == "err":
-                    self._log("[ERR] " + str(d), "error")
-                    self._pending_err = str(d)
-                elif k == "done":
+                m: Msg = self.msg_q.get_nowait()
+                if m.kind == "log":
+                    self._dispatch_log(str(m.payload))
+                elif m.kind == "err":
+                    self._log("[ERR] " + str(m.payload), "error")
+                    self._pending_err = str(m.payload)
+                elif m.kind == "done":
                     self.running = False
                     self.btn_stop.config(state=DISABLED)
                     self._enable()
@@ -1083,6 +1135,18 @@ class Application:
         except queue.Empty:
             pass
         self.root.after(80, self._poll)
+
+    def _dispatch_log(self, s: str) -> None:
+        """根据日志内容自动选择标签颜色."""
+        if "操作成功" in s or "已在选课结果" in s or "[OK]" in s:
+            t = "success"
+        elif "失败" in s or "错误" in s or "不存在" in s:
+            t = "error"
+        elif "冲突" in s:
+            t = "warn"
+        else:
+            t = "info"
+        self._log(s, t)
 
     # ════════════════════════════════════════════════════════════════
     #  按钮状态
@@ -1099,7 +1163,7 @@ class Application:
         self.cb_snipe_cat.config(state="readonly")
 
     # ════════════════════════════════════════════════════════════════
-    #  选课
+    #  选课（使用 _prepare_session 消除重复）
     # ════════════════════════════════════════════════════════════════
 
     def _start_sel(self) -> None:
@@ -1127,34 +1191,17 @@ class Application:
         always: int,
     ) -> None:
         try:
-            self.msg_q.put(("log", "正在登录…"))
-            jd, ck = login(conf, log_func=self._log_cb)
-            ba = show_msg(
-                jd,
-                log_func=self._log_cb,
-                batch_name=conf.get("batch_name", "第一轮正选（国际创新周）"),
-            )
-            self.msg_q.put(("log", f"选课批次 code：{ba}"))
+            session = _prepare_session(conf, self.msg_q, self._log_cb)
+            if session is None:
+                return
+            self.msg_q.put(Msg("log", f"选课批次 code：{session.batch_code}"))
 
             need_cats = {c["category"] for c in cs}
-            rows_by_cat: dict[int, list[dict]] = {}
-            for cat in need_cats:
-                cat_name = "必修" if cat == 0 else "选修"
-                self.msg_q.put(("log", f"正在获取{cat_name}课程列表…"))
-                resp = get_class(jd, conf, batch=ba, category=cat)
-                rows = resp.get("data", {}).get("rows", [])
-                rows_by_cat[cat] = rows
-                self.msg_q.put(("log", f"  {cat_name}：{len(rows)} 门"))
-                api_code = resp.get("code", "?")
-                api_msg = resp.get("msg", "")
-                if api_code != 200:
-                    self.msg_q.put(("log", f"  [WARN] API code={api_code}, msg={api_msg}"))
-                sample = [r.get("KCH", "?") for r in rows[:5]]
-                self.msg_q.put(("log", f"  API 返回课程号示例：{sample}"))
+            rows_by_cat = _fetch_courses(session, conf, need_cats, self.msg_q)
 
             for c in cs:
                 if self.stop_ev.is_set():
-                    self.msg_q.put(("log", "用户停止操作"))
+                    self.msg_q.put(Msg("log", "用户停止操作"))
                     break
                 rows = rows_by_cat.get(c["category"], [])
                 found = False
@@ -1164,10 +1211,10 @@ class Application:
                             for j in course.get("tcList", []):
                                 if j["KXH"] == c["KXH"]:
                                     add(
-                                        jd,
+                                        session.data,
                                         j,
-                                        cookie=ck,
-                                        batch=ba,
+                                        cookie=session.cookie,
+                                        batch=session.batch_code,
                                         always=always,
                                         category=0,
                                         log_func=self._log_cb,
@@ -1177,10 +1224,10 @@ class Application:
                                     break
                         else:
                             add(
-                                jd,
+                                session.data,
                                 course,
-                                cookie=ck,
-                                batch=ba,
+                                cookie=session.cookie,
+                                batch=session.batch_code,
                                 always=always,
                                 category=1,
                                 log_func=self._log_cb,
@@ -1190,7 +1237,7 @@ class Application:
                         break
                 if not found:
                     self.msg_q.put(
-                        (
+                        Msg(
                             "log",
                             f"未找到课程 {c['KCH']} {c['KXH']} ｜"
                             f"该类别共 {len(rows)} 门，"
@@ -1204,7 +1251,7 @@ class Application:
         except Exception as e:
             self._log_err(f"选课出错：{type(e).__name__}: {e}")
         finally:
-            self.msg_q.put(("done", ""))
+            self.msg_q.put(Msg("done"))
 
     # ════════════════════════════════════════════════════════════════
     #  退课
@@ -1235,34 +1282,17 @@ class Application:
         always: int,
     ) -> None:
         try:
-            self.msg_q.put(("log", "正在登录…"))
-            jd, ck = login(conf, log_func=self._log_cb)
-            ba = show_msg(
-                jd,
-                log_func=self._log_cb,
-                batch_name=conf.get("batch_name", "第一轮正选（国际创新周）"),
-            )
-            self.msg_q.put(("log", f"选课批次 code：{ba}"))
+            session = _prepare_session(conf, self.msg_q, self._log_cb)
+            if session is None:
+                return
+            self.msg_q.put(Msg("log", f"选课批次 code：{session.batch_code}"))
 
             need_cats = {c["category"] for c in cs}
-            rows_by_cat: dict[int, list[dict]] = {}
-            for cat in need_cats:
-                cat_name = "必修" if cat == 0 else "选修"
-                self.msg_q.put(("log", f"正在获取{cat_name}课程列表…"))
-                resp = get_class(jd, conf, batch=ba, category=cat)
-                rows = resp.get("data", {}).get("rows", [])
-                rows_by_cat[cat] = rows
-                self.msg_q.put(("log", f"  {cat_name}：{len(rows)} 门"))
-                api_code = resp.get("code", "?")
-                api_msg = resp.get("msg", "")
-                if api_code != 200:
-                    self.msg_q.put(("log", f"  [WARN] API code={api_code}, msg={api_msg}"))
-                sample = [r.get("KCH", "?") for r in rows[:5]]
-                self.msg_q.put(("log", f"  API 返回课程号示例：{sample}"))
+            rows_by_cat = _fetch_courses(session, conf, need_cats, self.msg_q)
 
             for c in cs:
                 if self.stop_ev.is_set():
-                    self.msg_q.put(("log", "用户停止操作"))
+                    self.msg_q.put(Msg("log", "用户停止操作"))
                     break
                 rows = rows_by_cat.get(c["category"], [])
                 found = False
@@ -1272,10 +1302,10 @@ class Application:
                             for j in course.get("tcList", []):
                                 if j["KXH"] == c["KXH"]:
                                     dele(
-                                        jd,
+                                        session.data,
                                         j,
-                                        cookie=ck,
-                                        batch=ba,
+                                        cookie=session.cookie,
+                                        batch=session.batch_code,
                                         always=always,
                                         category=0,
                                         log_func=self._log_cb,
@@ -1285,10 +1315,10 @@ class Application:
                                     break
                         else:
                             dele(
-                                jd,
+                                session.data,
                                 course,
-                                cookie=ck,
-                                batch=ba,
+                                cookie=session.cookie,
+                                batch=session.batch_code,
                                 always=always,
                                 category=1,
                                 log_func=self._log_cb,
@@ -1298,7 +1328,7 @@ class Application:
                         break
                 if not found:
                     self.msg_q.put(
-                        (
+                        Msg(
                             "log",
                             f"未找到课程 {c['KCH']} {c['KXH']} ｜"
                             f"该类别共 {len(rows)} 门，"
@@ -1312,7 +1342,7 @@ class Application:
         except Exception as e:
             self._log_err(f"退课出错：{type(e).__name__}: {e}")
         finally:
-            self.msg_q.put(("done", ""))
+            self.msg_q.put(Msg("done"))
 
     # ════════════════════════════════════════════════════════════════
     #  容量检查
@@ -1341,42 +1371,42 @@ class Application:
         cs: list[dict[str, Any]],
     ) -> None:
         try:
-            self.msg_q.put(("log", "正在登录…"))
-            jd, ck = login(conf, log_func=self._log_cb)
-            ba = show_msg(
-                jd,
-                log_func=self._log_cb,
-                batch_name=conf.get("batch_name", "第一轮正选（国际创新周）"),
-            )
-            self.msg_q.put(("log", f"选课批次 code：{ba}"))
+            session = _prepare_session(conf, self.msg_q, self._log_cb)
+            if session is None:
+                return
+            self.msg_q.put(Msg("log", f"选课批次 code：{session.batch_code}"))
             kset = {c["KCH"] for c in cs}
             k = 0
             while not self.stop_ev.is_set():
                 k += 1
-                rows = get_class(jd, conf, batch=ba, category=0).get("data", {}).get("rows", [])
+                rows = (
+                    get_class(session.data, conf, batch=session.batch_code, category=0)
+                    .get("data", {})
+                    .get("rows", [])
+                )
                 for course in rows:
                     if course["KCH"] in kset and course.get("SFYX") == "0":
                         sel = int(course.get("numberOfSelected", 0))
                         cap = int(course.get("classCapacity", 0))
-                        self.msg_q.put(("log", f"{course['KCM']}　已选/容量：{sel}/{cap}"))
+                        self.msg_q.put(Msg("log", f"{course['KCM']}　已选/容量：{sel}/{cap}"))
                         if sel < cap:
                             self.msg_q.put(
-                                (
+                                Msg(
                                     "log",
                                     f"  ✦ 发现空位 → {course['KXH']} {course['KCM']}",
                                 )
                             )
                             add(
-                                jd,
+                                session.data,
                                 course,
-                                ck,
-                                ba,
+                                session.cookie,
+                                session.batch_code,
                                 category=1,
                                 always=0,
                                 log_func=self._log_cb,
                                 stop_event=self.stop_ev,
                             )
-                self.msg_q.put(("log", f"第 {k} 次检查{'━' * min(k, 20)}"))
+                self.msg_q.put(Msg("log", f"第 {k} 次检查{'━' * min(k, 20)}"))
                 k = k % 10
                 time.sleep(0.5)
         except RuntimeError as e:
@@ -1384,7 +1414,7 @@ class Application:
         except Exception as e:
             self._log_err(f"容量检查出错：{type(e).__name__}: {e}")
         finally:
-            self.msg_q.put(("done", ""))
+            self.msg_q.put(Msg("done"))
 
     # ════════════════════════════════════════════════════════════════
     #  捡漏
@@ -1406,20 +1436,20 @@ class Application:
 
     def _w_snipe(self, conf: dict[str, Any], cat: int) -> None:
         try:
-            self.msg_q.put(("log", "正在登录…"))
-            jd, ck = login(conf, log_func=self._log_cb)
-            ba = show_msg(
-                jd,
-                log_func=self._log_cb,
-                batch_name=conf.get("batch_name", "第一轮正选（国际创新周）"),
-            )
-            self.msg_q.put(("log", f"选课批次 code：{ba}"))
+            session = _prepare_session(conf, self.msg_q, self._log_cb)
+            if session is None:
+                return
+            self.msg_q.put(Msg("log", f"选课批次 code：{session.batch_code}"))
 
             added: set[str] = set()
             k = 0
             while not self.stop_ev.is_set():
                 k += 1
-                rows = get_class(jd, conf, batch=ba, category=cat).get("data", {}).get("rows", [])
+                rows = (
+                    get_class(session.data, conf, batch=session.batch_code, category=cat)
+                    .get("data", {})
+                    .get("rows", [])
+                )
                 found_any = False
 
                 if cat == 1:
@@ -1435,16 +1465,16 @@ class Application:
                             continue
                         found_any = True
                         self.msg_q.put(
-                            (
+                            Msg(
                                 "log",
                                 f"  ✦ 发现空位 → {course.get('KCM', '')} ({sel}/{cap})",
                             )
                         )
                         add(
-                            jd,
+                            session.data,
                             course,
-                            ck,
-                            ba,
+                            session.cookie,
+                            session.batch_code,
                             category=1,
                             always=0,
                             log_func=self._log_cb,
@@ -1467,17 +1497,17 @@ class Application:
                                 continue
                             found_any = True
                             self.msg_q.put(
-                                (
+                                Msg(
                                     "log",
                                     f"  ✦ 发现空位 → {j.get('KCM', '')} "
                                     f"{j.get('KXH', '')} ({sel}/{cap})",
                                 )
                             )
                             add(
-                                jd,
+                                session.data,
                                 j,
-                                ck,
-                                ba,
+                                session.cookie,
+                                session.batch_code,
                                 category=0,
                                 always=0,
                                 log_func=self._log_cb,
@@ -1486,7 +1516,7 @@ class Application:
                             added.add(key)
 
                 status = f"已抢 {len(added)} 门" if added else "暂无空位"
-                self.msg_q.put(("log", f"第 {k} 轮检查 ━ {status} ━{'━' * min(k, 20)}"))
+                self.msg_q.put(Msg("log", f"第 {k} 轮检查 ━ {status} ━{'━' * min(k, 20)}"))
                 k = k % 10
 
                 time.sleep(8 if not found_any and not added else 5)
@@ -1496,7 +1526,7 @@ class Application:
         except Exception as e:
             self._log_err(f"捡漏出错：{type(e).__name__}: {e}")
         finally:
-            self.msg_q.put(("done", ""))
+            self.msg_q.put(Msg("done"))
 
     # ════════════════════════════════════════════════════════════════
     #  停止 / 退出

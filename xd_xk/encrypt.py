@@ -4,33 +4,35 @@ import base64
 
 from Cryptodome.Cipher import AES
 
+# ── 常量 ──────────────────────────────────────────────────────────
+_AES_KEY = "MWMqg2tPcDkxcm11"
+_AES_BLOCK_SIZE = 16
 
-class Encrypt:
-    """AES-ECB 加密器（PKCS7 填充）."""
+
+class AESCipher:
+    """AES-ECB 加密器（PKCS7 填充）.
+
+    策略模式：密钥通过构造注入，可替换密钥或算法实现.
+    """
 
     def __init__(self, key: str) -> None:
         self.key = key.encode("utf-8")
 
-    def pkcs7padding(self, text: str) -> str:
-        """PKCS7 填充."""
-        bs = 16
-        length = len(text)
-        bytes_length = len(text.encode("utf-8"))
-        padding_size = length if (bytes_length == length) else bytes_length
-        padding = bs - padding_size % bs
-        padding_text = chr(padding) * padding
-        self.coding = chr(padding)
-        return text + padding_text
+    @staticmethod
+    def _pkcs7_pad(data: bytes, block_size: int = _AES_BLOCK_SIZE) -> bytes:
+        """PKCS7 填充 — 直接操作字节，避免 str/bytes 混用."""
+        pad_len = block_size - (len(data) % block_size)
+        return data + bytes([pad_len] * pad_len)
 
-    def aes_encrypt(self, content: str) -> str:
+    def encrypt(self, plaintext: str) -> str:
         """AES-ECB 加密，返回 Base64 字符串."""
         cipher = AES.new(self.key, AES.MODE_ECB)
-        content_padding = self.pkcs7padding(content)
-        encrypt_bytes = cipher.encrypt(content_padding.encode("utf-8"))
-        return str(base64.b64encode(encrypt_bytes), encoding="utf-8")
+        data = plaintext.encode("utf-8")
+        padded = self._pkcs7_pad(data)
+        encrypted = cipher.encrypt(padded)
+        return base64.b64encode(encrypted).decode("ascii")
 
 
 def AES_encrypt(text: str) -> str:
-    """加密密码明文."""
-    key = "MWMqg2tPcDkxcm11"
-    return Encrypt(key=key).aes_encrypt(text)
+    """加密密码明文（便捷函数，保持向后兼容）."""
+    return AESCipher(key=_AES_KEY).encrypt(text)
