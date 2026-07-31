@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 from xd_xk.core import add, get_class, login, show_msg
@@ -37,6 +38,19 @@ _DEFAULT_KCH = [
     "EY226046",
     "EY226047",
 ]
+
+_EPILOG = """\
+示例用法:
+  xd-xk select                    选课（必修，FANKC）
+  xd-xk select -c 1               选课（选修，XGKC）
+  xd-xk drop                      退课（必修）
+  xd-xk drop -c 1                 退课（选修）
+  xd-xk check                     容量检查（使用默认课程号列表）
+  xd-xk check EY226022 EY226023   容量检查（指定课程号）
+
+配置文件:
+  当前目录下需要有 conf.json，包含学号、密码、批次名称等信息。
+  首次使用请先手动创建或从模板复制。"""
 
 
 def _load_conf() -> dict:
@@ -81,18 +95,75 @@ def cmd_check(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="xd-xk",
-        description="西安电子科技大学自动选课工具",
+        description="西安电子科技大学 (XDU) 自动选课工具 —— 登录教务系统，自动完成选课、退课与容量监控。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_EPILOG,
     )
-    sub = parser.add_subparsers(dest="command")
+    parser.add_argument(
+        "-V", "--version",
+        action="version",
+        version=f"xd-xk {pkg_version('xd-xk')}",
+        help="显示版本号并退出",
+    )
+    sub = parser.add_subparsers(
+        dest="command",
+        title="可用命令",
+        description="选择要执行的操作：",
+    )
 
-    p_sel = sub.add_parser("select", help="选课")
-    p_sel.add_argument("-c", "--category", type=int, default=0, help="0=必修 1=选修")
+    p_sel = sub.add_parser(
+        "select",
+        help="自动选课 — 登录后获取课程列表并提交选课请求",
+        description="登录教务系统，匹配选课批次，自动获取课程列表并提交选课请求。",
+        epilog="示例: xd-xk select           # 必修课选课\n      xd-xk select -c 1      # 选修课选课",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_sel.add_argument(
+        "-c", "--category",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        metavar="CATEGORY",
+        help="课程类别：0=必修课（FANKC，默认），1=选修课（XGKC）",
+    )
 
-    p_drop = sub.add_parser("drop", help="退课")
-    p_drop.add_argument("-c", "--category", type=int, default=0, help="0=必修 1=选修")
+    p_drop = sub.add_parser(
+        "drop",
+        help="自动退课 — 登录后获取已选课程并提交退课请求",
+        description="登录教务系统，匹配选课批次，获取已选课程列表并提交退课请求。",
+        epilog="示例: xd-xk drop              # 必修课退课\n      xd-xk drop -c 1         # 选修课退课",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_drop.add_argument(
+        "-c", "--category",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        metavar="CATEGORY",
+        help="课程类别：0=必修课（TJKC，默认），1=选修课（XGKC）",
+    )
 
-    p_chk = sub.add_parser("check", help="容量检查（循环扫描）")
-    p_chk.add_argument("kch", nargs="*", help="课程号列表，不指定则使用默认列表")
+    p_chk = sub.add_parser(
+        "check",
+        help="容量检查 — 持续监控课程余量，有空位时自动抢课",
+        description=(
+            "循环扫描选修课列表，监控每门课已选人数与课容量。"
+            "当发现某门课已选人数 < 课容量（即有空位），自动提交选课请求。"
+            "按 Ctrl+C 停止。"
+        ),
+        epilog=(
+            "示例: xd-xk check                              # 使用默认课程号列表\n"
+            "      xd-xk check EY226022 EY226023             # 只监控指定课程号"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_chk.add_argument(
+        "kch",
+        nargs="*",
+        metavar="KCH",
+        help="要监控的课程号（KCH）列表，多个用空格分隔。不指定则使用内置默认列表（共 %d 门课）"
+        % len(_DEFAULT_KCH),
+    )
 
     args = parser.parse_args()
 
