@@ -64,7 +64,7 @@ class CourseSession:
         这是 GUI/CLI 中最常见的启动流程，此前在 5 个地方重复实现.
         """
         jd, ck = login(conf, log_func=log_func)
-        batch_name = conf.get("batch_name", "第一轮正选（国际创新周）")
+        batch_name = conf.get("batch_name", "")
         ba = show_msg(jd, log_func=log_func, batch_name=batch_name)
         return cls(
             token=jd["data"]["token"],
@@ -302,6 +302,23 @@ def _match_batch(
         raise RuntimeError(f"本轮选课暂未开始：{matched_closed}\n请等待开放后再试")
     avail = [i["name"] for i in batches if i["canSelect"] == "1"]
     raise RuntimeError(f"匹配到批次但未获取到 code\n可选批次：{avail if avail else '无'}")
+
+
+def get_batch_list(data: JsonDict) -> list[JsonDict]:
+    """从登录数据中提取可选批次列表（需先登录）。
+
+    Returns:
+        批次列表，每项含 name / code / canSelect 等字段。
+    """
+    return data["data"]["student"]["electiveBatchList"]
+
+
+def match_batch_name(batches: list[JsonDict], keyword: str) -> str:
+    """在批次列表中按名称关键字匹配，返回 batch_code。
+
+    等价于 _match_batch，但对调用方隐藏内部实现细节。
+    """
+    return _match_batch(batches, keyword)
 
 
 def show_msg(

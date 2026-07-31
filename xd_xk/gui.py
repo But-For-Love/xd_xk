@@ -19,7 +19,7 @@ from typing import Any
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-from xd_xk.core import CourseSession, add, dele, get_class, login
+from xd_xk.core import CourseSession, add, dele, get_batch_list, get_class, login
 
 CONF_PATH = Path("conf.json")
 
@@ -70,7 +70,7 @@ class C:
 _DEFAULT_CONF: dict[str, Any] = {
     "ocr_captcha": "1",
     "debug": "0",
-    "batch_name": "第二轮补选（国际创新周）",
+    "batch_name": "",
     "bx_or_xx": 0,
     "bx": [],
     "xx": [],
@@ -92,7 +92,7 @@ def save_conf(
     ocr: bool,
     debug: bool,
     courses: list[dict[str, Any]],
-    batch_name: str = "第二轮补选（国际创新周）",
+    batch_name: str = "",
 ) -> None:
     """保存配置到 conf.json."""
     bx = [
@@ -738,8 +738,13 @@ class Application:
         r2 = ttk.Frame(card)
         r2.pack(fill=X, padx=16, pady=(4, 12))
         ttk.Label(r2, text="选课批次").pack(side=LEFT)
-        self.v_batch = tk.StringVar(value="第一轮正选（国际创新周）")
-        ttk.Entry(r2, textvariable=self.v_batch, width=42).pack(side=LEFT, padx=(4, 8))
+        self.v_batch = tk.StringVar()
+        self.cb_batch = ttk.Combobox(
+            r2,
+            textvariable=self.v_batch,
+            width=39,
+        )
+        self.cb_batch.pack(side=LEFT, padx=(4, 8))
         ttk.Button(
             r2,
             text="获取批次",
@@ -748,7 +753,7 @@ class Application:
         ).pack(side=LEFT, padx=(0, 8))
         ttk.Label(
             r2,
-            text="匹配批次名称关键字",
+            text="下拉选择或手动输入关键字匹配",
             foreground=C.TEXT_DIS,
             font=("", 9),
         ).pack(side=LEFT)
@@ -1028,7 +1033,7 @@ class Application:
         self.v_pass.set(c["data"].get("password", ""))
         self.v_ocr.set(c.get("ocr_captcha", "1") == "1")
         self.v_dbg.set(c.get("debug", "0") == "1")
-        self.v_batch.set(c.get("batch_name", "第一轮正选（国际创新周）"))
+        self.v_batch.set(c.get("batch_name", ""))
         for x in c.get("bx", []):
             self.tree.insert(
                 "",
@@ -1063,24 +1068,47 @@ class Application:
 
     def _w_fetch_batches(self, conf: dict[str, Any]) -> None:
         try:
-            jd, ck = login(conf, log_func=self._log_cb)
-            student = jd["data"]["student"]
-            lst = student.get("electiveBatchList", [])
-            if not lst:
+            jd, _ck = login(conf, log_func=self._log_cb)
+            batches = get_batch_list(jd)
+            if not batches:
                 self.msg_q.put(Msg("err", "没有可用的选课批次"))
                 return
-            self.root.after(0, self._show_batch_dialog, lst)
+
+            # 收集批次名称，记录第一个可选批次
+            names: list[str] = []
+            first_open: str = ""
+            for b in batches:
+                names.append(b["name"])
+                if not first_open and b.get("canSelect") == "1":
+                    first_open = b["name"]
+
+            self.root.after(0, self._on_batches_fetched, names, first_open, batches)
         except RuntimeError as e:
             self._log_err(e)
         except Exception as e:
             self._log_err(f"获取批次出错：{type(e).__name__}: {e}")
 
-    def _show_batch_dialog(self, batches: list[dict[str, str]]) -> None:
-        d = BatchSelectDialog(self.root, batches)
-        self.root.wait_window(d)
-        if d.selected:
-            self.v_batch.set(d.selected)
-            self._log(f"已选择批次：{d.selected}")
+    def _on_batches_fetched(
+        self,
+        names: list[str],
+        first_open: str,
+        batches: list[dict[str, Any]],
+    ) -> None:
+        """批次获取完成后，更新下拉框选项并打印可选批次列表."""
+        self.cb_batch["values"] = names
+
+        # 在日志中列出所有批次及其状态
+        self._log("可用批次：")
+        for b in batches:
+            status = "✓ 可选" if b.get("canSelect") == "1" else "✗ 未开放"
+            self._log(f"  {status}  {b['name']}")
+
+        # 自动选择第一个可选批次
+        if first_open:
+            self.v_batch.set(first_open)
+            self._log(f"已自动选择：{first_open}")
+        else:
+            self._log("当前没有可选批次，请等待开放")
 
     def _mk_conf(self) -> dict[str, Any]:
         return {

@@ -12,44 +12,17 @@ from xd_xk.core import add, get_class, login, show_msg
 
 CONF_PATH = Path("conf.json")
 
-# ── 默认扫描的选修课课程号 ─────────────────────────────────────────
-_DEFAULT_KCH = [
-    "EY226022",
-    "EY226023",
-    "EY226024",
-    "EY226025",
-    "EY226026",
-    "EY226027",
-    "EY226028",
-    "EY226029",
-    "EY226030",
-    "EY226031",
-    "EY226032",
-    "EY226035",
-    "EY226036",
-    "EY226037",
-    "EY226038",
-    "EY226039",
-    "EY226041",
-    "EY226042",
-    "EY226043",
-    "EY226044",
-    "EY226045",
-    "EY226046",
-    "EY226047",
-]
-
 _EPILOG = """\
 示例用法:
   xd-xk select                    选课（必修，FANKC）
   xd-xk select -c 1               选课（选修，XGKC）
   xd-xk drop                      退课（必修）
   xd-xk drop -c 1                 退课（选修）
-  xd-xk check                     容量检查（使用默认课程号列表）
+  xd-xk check                     容量检查（使用 conf.json 中的选修课列表）
   xd-xk check EY226022 EY226023   容量检查（指定课程号）
 
 配置文件:
-  当前目录下需要有 conf.json，包含学号、密码、批次名称等信息。
+  当前目录下需要有 conf.json，包含学号、密码、批次名称、课程列表等信息。
   首次使用请先手动创建或从模板复制。"""
 
 
@@ -66,13 +39,26 @@ def _login_and_fetch(args: argparse.Namespace) -> None:
     print("[OK] 登录成功，已获取课程列表")
 
 
+def _kch_from_conf(conf: dict) -> set[str]:
+    """从 conf.json 中提取所有选修课的课程号."""
+    return {c["KCH"] for c in conf.get("xx", []) if c.get("KCH")}
+
+
 def cmd_check(args: argparse.Namespace) -> None:
     """容量检查 — 循环扫描指定课程号，有余量自动选课."""
     conf = _load_conf()
     data, cookie = login(conf)
     batch = show_msg(data, batch_name=conf.get("batch_name", "2025级"))
 
-    target_kch = set(args.kch) if args.kch else set(_DEFAULT_KCH)
+    if args.kch:
+        target_kch = set(args.kch)
+    else:
+        target_kch = _kch_from_conf(conf)
+        if not target_kch:
+            print("错误：未指定课程号，且 conf.json 的 xx 列表为空。")
+            print("请在 conf.json 中添加选修课信息，或通过命令行参数指定课程号。")
+            return
+
     print(f"开始容量检查，目标课程号：{target_kch}")
 
     k = 0
@@ -152,7 +138,7 @@ def main() -> None:
             "按 Ctrl+C 停止。"
         ),
         epilog=(
-            "示例: xd-xk check                              # 使用默认课程号列表\n"
+            "示例: xd-xk check                              # 使用 conf.json 中的选修课列表\n"
             "      xd-xk check EY226022 EY226023             # 只监控指定课程号"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -161,8 +147,7 @@ def main() -> None:
         "kch",
         nargs="*",
         metavar="KCH",
-        help="要监控的课程号（KCH）列表，多个用空格分隔。不指定则使用内置默认列表（共 %d 门课）"
-        % len(_DEFAULT_KCH),
+        help="要监控的课程号（KCH）列表，多个用空格分隔。不指定则使用 conf.json 中 xx 列表的课程号",
     )
 
     args = parser.parse_args()
