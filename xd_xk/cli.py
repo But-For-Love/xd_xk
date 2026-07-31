@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import tempfile
 import time
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
-from xd_xk.core import add, get_class, login, show_msg
+from PIL import Image as PILImage
+
+from xd_xk.core import CourseSession, add, get_class
 
 CONF_PATH = Path("conf.json")
 
@@ -30,50 +33,74 @@ def _load_conf() -> dict:
     return json.loads(CONF_PATH.read_text(encoding="utf-8"))
 
 
+def _manual_captcha(img_bytes: bytes) -> str:
+    """用系统图片查看器显示验证码，等待用户手动输入（仅 CLI 使用）."""
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        f.write(img_bytes)
+        tmp_path = f.name
+    img = PILImage.open(tmp_path)
+    img.show()
+    code = input("请输入验证码: ")
+    Path(tmp_path).unlink(missing_ok=True)
+    return code
+
+
 def _login_and_fetch(args: argparse.Namespace) -> None:
     """选课 / 退课共用：登录 → 匹配批次 → 获取课程列表."""
     conf = _load_conf()
-    data, _cookie = login(conf)
-    batch = show_msg(data, batch_name=conf.get("batch_name", "2025级"))
-    get_class(data, conf, batch=batch, category=args.category)
+    session = CourseSession.create(conf, captcha_cb=_manual_captcha)
+    get_class(session.data, conf, batch=session.batch_code, category=args.category)
     print("[OK] 登录成功，已获取课程列表")
 
 
-def _kch_from_conf(conf: dict) -> set[str]:
-    """从 conf.json 中提取所有选修课的课程号."""
-    return {c["KCH"] for c in conf.get("xx", []) if c.get("KCH")}
+def _courses_from_conf(conf: dict) -> dict[int, set[str]]:
+    """从 conf.json 中提取所有课程号，按分类分组."""
+    by_cat: dict[int, set[str]] = {}
+    for c in conf.get("bx", []):
+        if c.get("KCH"):
+            by_cat.setdefault(0, set()).add(c["KCH"])
+    for c in conf.get("xx", []):
+        if c.get("KCH"):
+            by_cat.setdefault(1, set()).add(c["KCH"])
+    return by_cat
 
 
 def cmd_check(args: argparse.Namespace) -> None:
     """容量检查 — 循环扫描指定课程号，有余量自动选课."""
     conf = _load_conf()
-    data, cookie = login(conf)
-    batch = show_msg(data, batch_name=conf.get("batch_name", "2025级"))
+    session = CourseSession.create(conf, captcha_cb=_manual_captcha)
 
     if args.kch:
-        target_kch = set(args.kch)
+        by_cat = {1: set(args.kch)}  # 命令行指定的当作选修处理
     else:
-        target_kch = _kch_from_conf(conf)
-        if not target_kch:
-            print("错误：未指定课程号，且 conf.json 的 xx 列表为空。")
-            print("请在 conf.json 中添加选修课信息，或通过命令行参数指定课程号。")
+        by_cat = _courses_from_conf(conf)
+        if not by_cat:
+            print("错误：未指定课程号，且 conf.json 的 bx / xx 列表均为空。")
+            print("请在 conf.json 中添加课程信息，或通过命令行参数指定课程号。")
             return
 
-    print(f"开始容量检查，目标课程号：{target_kch}")
+    all_kch = {kch for kset in by_cat.values() for kch in kset}
+    print(f"开始容量检查，目标课程号：{all_kch}")
 
     k = 0
     while True:
         k += 1
-        rows = get_class(data, conf, batch=batch, category=1)["data"]["rows"]
-        for course in rows:
-            if course["KCH"] in target_kch and course.get("SFYX") == "0":
-                kcm = course["KCM"]
-                sel = course.get("numberOfSelected")
-                cap = course.get("classCapacity")
-                print(kcm, sel, cap)
-                if (sel or 0) < (cap or 0):
-                    print(course.get("KXH"), course.get("KCM"))
-                    add(data, course, cookie, batch, category=1, always=0)
+        for cat, target_kch in by_cat.items():
+            rows = get_class(
+                session.data, conf, batch=session.batch_code, category=cat,
+            )["data"]["rows"]
+            for course in rows:
+                if course["KCH"] in target_kch and course.get("SFYX") == "0":
+                    kcm = course["KCM"]
+                    sel = course.get("numberOfSelected")
+                    cap = course.get("classCapacity")
+                    print(kcm, sel, cap)
+                    if (sel or 0) < (cap or 0):
+                        print(course.get("KXH"), course.get("KCM"))
+                        add(
+                            session.data, course, session.cookie,
+                            session.batch_code, category=cat, always=0,
+                        )
         print(f"第 {k} 次检查{'━' * min(k % 10 or 10, 20)}")
         time.sleep(0.5)
 

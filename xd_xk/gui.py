@@ -546,71 +546,6 @@ class CourseBrowserDialog(tk.Toplevel):
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  对话框 · 选择选课批次
-# ═══════════════════════════════════════════════════════════════════
-
-
-class BatchSelectDialog(tk.Toplevel):
-    """显示可选批次列表，用户点击选择."""
-
-    def __init__(self, parent: tk.Widget, batches: list[dict[str, str]]) -> None:
-        super().__init__(parent)
-        self.title("选择选课批次")
-        self.resizable(False, False)
-        self.grab_set()
-        self.configure(bg=C.BG)
-        self.selected: str | None = None
-
-        self._batches = batches
-        self._build()
-        _center_win(self, parent)
-
-        self.protocol("WM_DELETE_WINDOW", self._cancel)
-        self.bind("<Escape>", lambda e: self._cancel())
-
-    def _build(self) -> None:
-        ttk.Label(
-            self,
-            text="点击选择要使用的选课批次：",
-            foreground=C.TEXT_SEC,
-            font=("", 10),
-        ).pack(padx=16, pady=(16, 8))
-
-        frame = ttk.Frame(self)
-        frame.pack(fill=BOTH, expand=True, padx=16, pady=(0, 8))
-
-        for b in self._batches:
-            name = b["name"]
-            can = b["canSelect"] == "1"
-            state_text = "已开放" if can else "未开放"
-            btn_text = f"{name}  [{state_text}]"
-
-            row = ttk.Frame(frame)
-            row.pack(fill=X, pady=2)
-            btn = ttk.Button(
-                row,
-                text=btn_text,
-                bootstyle="info-outline" if can else "secondary-outline",
-                command=lambda n=name: self._pick(n),
-            )
-            btn.pack(side=LEFT, fill=X, expand=True)
-            if not can:
-                btn.config(state=DISABLED)
-
-        bf = ttk.Frame(self)
-        bf.pack(fill=X, padx=16, pady=(4, 16))
-        ttk.Button(bf, text="取消", bootstyle="secondary", command=self._cancel).pack(side=RIGHT)
-
-    def _pick(self, name: str) -> None:
-        self.selected = name
-        self.destroy()
-
-    def _cancel(self) -> None:
-        self.selected = None
-        self.destroy()
-
-
-# ═══════════════════════════════════════════════════════════════════
 #  主界面
 # ═══════════════════════════════════════════════════════════════════
 
@@ -1360,37 +1295,41 @@ class Application:
             self.msg_q.put(Msg("log", "正在登录…"))
             session = CourseSession.create(conf, log_func=self._log_cb)
             self.msg_q.put(Msg("log", f"选课批次 code：{session.batch_code}"))
-            kset = {c["KCH"] for c in cs}
+            # 按用户课程的分类分别扫描
+            by_cat: dict[int, set[str]] = {}
+            for c in cs:
+                by_cat.setdefault(c["category"], set()).add(c["KCH"])
             k = 0
             while not self.stop_ev.is_set():
                 k += 1
-                rows = (
-                    get_class(session.data, conf, batch=session.batch_code, category=0)
-                    .get("data", {})
-                    .get("rows", [])
-                )
-                for course in rows:
-                    if course["KCH"] in kset and course.get("SFYX") == "0":
-                        sel = int(course.get("numberOfSelected", 0))
-                        cap = int(course.get("classCapacity", 0))
-                        self.msg_q.put(Msg("log", f"{course['KCM']}　已选/容量：{sel}/{cap}"))
-                        if sel < cap:
-                            self.msg_q.put(
-                                Msg(
-                                    "log",
-                                    f"  ✦ 发现空位 → {course['KXH']} {course['KCM']}",
+                for cat, kset in by_cat.items():
+                    rows = (
+                        get_class(session.data, conf, batch=session.batch_code, category=cat)
+                        .get("data", {})
+                        .get("rows", [])
+                    )
+                    for course in rows:
+                        if course["KCH"] in kset and course.get("SFYX") == "0":
+                            sel = int(course.get("numberOfSelected", 0))
+                            cap = int(course.get("classCapacity", 0))
+                            self.msg_q.put(Msg("log", f"{course['KCM']}　已选/容量：{sel}/{cap}"))
+                            if sel < cap:
+                                self.msg_q.put(
+                                    Msg(
+                                        "log",
+                                        f"  ✦ 发现空位 → {course['KXH']} {course['KCM']}",
+                                    )
                                 )
-                            )
-                            add(
-                                session.data,
-                                course,
-                                session.cookie,
-                                session.batch_code,
-                                category=1,
-                                always=0,
-                                log_func=self._log_cb,
-                                stop_event=self.stop_ev,
-                            )
+                                add(
+                                    session.data,
+                                    course,
+                                    session.cookie,
+                                    session.batch_code,
+                                    category=cat,
+                                    always=0,
+                                    log_func=self._log_cb,
+                                    stop_event=self.stop_ev,
+                                )
                 self.msg_q.put(Msg("log", f"第 {k} 次检查{'━' * min(k, 20)}"))
                 k = k % 10
                 time.sleep(0.5)

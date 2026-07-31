@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,7 +13,6 @@ from typing import Any
 
 import ddddocr
 import requests
-from PIL import Image as PILImage
 
 from xd_xk.encrypt import AES_encrypt
 
@@ -58,12 +56,13 @@ class CourseSession:
         cls,
         conf: JsonDict,
         log_func: LogFunc = None,
+        captcha_cb: Callable[[bytes], str] | None = None,
     ) -> CourseSession:
         """工厂方法：登录 → 展示信息 → 匹配批次 → 返回会话.
 
-        这是 GUI/CLI 中最常见的启动流程，此前在 5 个地方重复实现.
+        这是 GUI/CLI 中最常见的启动流程.
         """
-        jd, ck = login(conf, log_func=log_func)
+        jd, ck = login(conf, log_func=log_func, captcha_cb=captcha_cb)
         batch_name = conf.get("batch_name", "")
         ba = show_msg(jd, log_func=log_func, batch_name=batch_name)
         return cls(
@@ -87,16 +86,9 @@ def _log(msg: str, log_func: LogFunc = None) -> None:
         logger.info(msg)
 
 
-def _show_captcha_manual(image_bytes: bytes) -> str:
-    """用系统图片查看器显示验证码，等待用户手动输入."""
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-        f.write(image_bytes)
-        tmp_path = f.name
-    img = PILImage.open(tmp_path)
-    img.show()
-    code = input("请输入验证码: ")
-    Path(tmp_path).unlink(missing_ok=True)
-    return code
+# 注意：人工验证码输入已从 core 层移除。
+# 调用方如需手动输入验证码，应通过 captcha_cb 回调自行实现。
+# CLI 入口在 cli.py 中提供了参考实现.
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -139,8 +131,16 @@ def ocr_captcha(img: bytes) -> str:
     return ocr.classification(img)
 
 
-def get_captcha(conf: JsonDict, log_func: LogFunc = None) -> tuple[str, str]:
+def get_captcha(
+    conf: JsonDict,
+    log_func: LogFunc = None,
+    captcha_cb: Callable[[bytes], str] | None = None,
+) -> tuple[str, str]:
     """获取验证码，返回 (code, uuid).
+
+    Args:
+        captcha_cb: 人工验证码回调，接收图片 bytes，返回用户输入的验证码。
+                    仅当 ocr_captcha=0 时调用。不提供则 OCR 关闭时报错。
 
     Raises:
         RuntimeError: 网络异常、接口异常或识别失败时抛出.
@@ -186,8 +186,13 @@ def get_captcha(conf: JsonDict, log_func: LogFunc = None) -> tuple[str, str]:
         except Exception as e:
             raise RuntimeError(f"验证码 OCR 识别失败：{type(e).__name__}: {e}")
         _log(f"验证码识别结果：{code}", log_func)
+    elif captcha_cb:
+        code = captcha_cb(img_bytes)
     else:
-        code = _show_captcha_manual(img_bytes)
+        raise RuntimeError(
+            "验证码需要人工输入（ocr_captcha=0），但未提供 captcha_cb 回调。"
+            "请启用自动验证码或提供人工输入回调。"
+        )
 
     return code, p["data"]["uuid"]
 
@@ -197,8 +202,15 @@ def get_captcha(conf: JsonDict, log_func: LogFunc = None) -> tuple[str, str]:
 # ═══════════════════════════════════════════════════════════════════
 
 
-def login(conf: JsonDict, log_func: LogFunc = None) -> tuple[JsonDict, dict[str, str]]:
+def login(
+    conf: JsonDict,
+    log_func: LogFunc = None,
+    captcha_cb: Callable[[bytes], str] | None = None,
+) -> tuple[JsonDict, dict[str, str]]:
     """登录选课系统，返回 (json_data, cookie_dict).
+
+    Args:
+        captcha_cb: 人工验证码回调，传给 get_captcha。
 
     Raises:
         RuntimeError: 登录失败时抛出.
@@ -207,10 +219,11 @@ def login(conf: JsonDict, log_func: LogFunc = None) -> tuple[JsonDict, dict[str,
 
     form = dict(conf["data"])
     if not form.get("loginname") or not form.get("password"):
-        form["loginname"] = input("学号：")
-        form["password"] = input("密码：")
+        raise RuntimeError(
+            "配置中缺少学号或密码，请在 conf.json 的 data.loginname / data.password 中填写"
+        )
     form["password"] = AES_encrypt(form["password"])
-    form["captcha"], form["uuid"] = get_captcha(conf, log_func=log_func)
+    form["captcha"], form["uuid"] = get_captcha(conf, log_func=log_func, captcha_cb=captcha_cb)
 
     _log(f"正在登录… 学号：{form['loginname']}", log_func)
 
