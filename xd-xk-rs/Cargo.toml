@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/xd-xk-core",
+    "crates/xd-xk-cli",
+    "crates/xd-xk-gui",
+]
+# 默认构建目标 = CLI（及它依赖的核心库）。GUI 是 feature-gated 的 stub，
+# 不进默认构建；需要时用 `cargo build -p xd-xk-gui`。
+default-members = [
+    "crates/xd-xk-core",
+    "crates/xd-xk-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+license = "MIT"
+
+[workspace.dependencies]
+# ── 异步运行时 ──
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+
+# ── HTTP / JSON ──
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# ── 加密 ──
+aes = "0.8"
+base64 = "0.22"
+
+# ── 日志 ──
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# ── 配置 / 课程文件 ──
+toml_edit = "0.22"
+csv = "1.3"
+encoding_rs = "0.8"
+
+# ── 错误处理 ──
+thiserror = "2"
+anyhow = "1"
+
+# ── CLI ──
+clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
+
+# ── 测试 ──
+wiremock = "0.6"
+
+[profile.release]
+lto = "thin"
+strip = true

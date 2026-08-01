@@ -22,3 +22,11 @@ captcha_pac.json
 login_pac.json
 batch_pac.json
 classlist.json
+
+# Rust
+/target
+xd-xk-rs/target/
+# 运行时生成的数据文件（根目录），docs/examples/ 下的模板仍受版本控制
+/config.toml
+/courses.csv
+/courses.xlsx

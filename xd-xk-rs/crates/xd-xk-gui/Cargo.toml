@@ -1,0 +1,14 @@
+[package]
+name = "xd-xk-gui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "西电自动选课工具 GUI（stub，feature-gated，暂不进入默认构建）"
+
+[lib]
+name = "xd_xk_gui"
+
+[features]
+# 预留：GUI 实现开关。gpui 生态稳定（P4）后再启用并引入依赖。
+gui = []

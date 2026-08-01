@@ -1,0 +1,33 @@
+[package]
+name = "xd-xk-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "西电自动选课工具核心业务库（无 UI、无 CLI）"
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+aes = { workspace = true }
+base64 = { workspace = true }
+tracing = { workspace = true }
+toml_edit = { workspace = true, features = ["serde"] }
+csv = { workspace = true }
+encoding_rs = { workspace = true }
+thiserror = { workspace = true }
+
+# xlsx feature：用 calamine 读、rust_xlsxwriter 写
+calamine = { version = "0.26", optional = true }
+rust_xlsxwriter = { version = "0.79", optional = true }
+
+[dev-dependencies]
+wiremock = { workspace = true }
+
+[features]
+default = []
+# 启用 XLSX 课程文件读写（calamine + rust_xlsxwriter）
+xlsx = ["dep:calamine", "dep:rust_xlsxwriter"]
