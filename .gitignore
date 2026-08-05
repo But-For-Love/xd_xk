@@ -1,0 +1,21 @@
+/target
+/target-fixed
+.env
+.env.*
+!.env.example
+
+# 本地验证码模型较大，不提交仓库；用 scripts/setup-model.ps1 生成
+ddddocr.onnx
+*.onnx
+
+# 调试响应可能包含 token 与学生信息
+captcha_pac.json
+login_pac.json
+classlist_required.json
+classlist_elective.json
+batch_pac.json
+captcha.png
+
+# IDE
+.idea/
+.vscode/
