@@ -4,9 +4,7 @@
 .env.*
 !.env.example
 
-# 本地验证码模型较大，不提交仓库；用 scripts/setup-model.ps1 生成
-ddddocr.onnx
-*.onnx
+# 验证码模型（约 13MB）随仓库提交；scripts/setup-model.ps1 可重新生成
 
 # 调试响应可能包含 token 与学生信息
 captcha_pac.json
@@ -15,6 +13,7 @@ classlist_required.json
 classlist_elective.json
 batch_pac.json
 captcha.png
+test.png
 
 # IDE
 .idea/
