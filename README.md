@@ -10,7 +10,7 @@
 - `reqwest`：异步 HTTP 请求与 Cookie 管理
 - `aes` / `base64`：与 Python `pycryptodome` 一致的 AES-128-ECB + PKCS#7 + Base64 密码加密
 - `thiserror` / `anyhow`：分层错误处理
-- `dotenvy`：`.env` 配置
+- `toml` + `serde`：TOML 配置文件（旧版 `.env` 会自动迁移）
 
 > 注意：为了简单直观，所有交互输入（包括密码）都是明文显示，不会做隐藏输入。
 
@@ -28,12 +28,12 @@
    bash scripts/setup-model.sh
    ```
 
-   也可以自行把 `common_old.onnx` 放到项目根目录并命名为 `ddddocr.onnx`，或通过 `XK_OCR_MODEL` / `--model` 指定路径。
+   也可以自行把 `common_old.onnx` 放到项目根目录并命名为 `ddddocr.onnx`，或在 `config.toml` 中设置 `ocr_model`、通过 `--model` 指定路径。
 
-2. 创建配置：
+2. 创建配置（首次运行也会自动生成 `config.toml`，旧版 `.env` 会被自动迁移）：
 
    ```powershell
-   Copy-Item .env.example .env
+   Copy-Item config.example.toml config.toml
    ```
 
 3. 编译：
@@ -106,19 +106,29 @@ cargo run --release -- drop
 
 ## 配置项
 
-全部配置统一保存在被 Git 忽略的 `.env`：
+全部配置统一保存在被 Git 忽略的 `config.toml`（旧版 `.env` 首次运行会自动迁移）：
 
-- `XK_LOGINNAME` / `XK_PASSWORD`：学号与密码，留空时每次启动交互输入
-- `XK_OCR_CAPTCHA`：`1` 自动识别验证码，`0` 保存图片后手动输入
-- `XK_DEBUG`：`1` 保存接口原始响应（`login_pac.json` 等）
-- `XK_BATCH_KEYWORD`：批次名称关键字，留空自动选择第一个可选批次
-- `XK_CAMPUS`：课程列表接口使用的校区代码
-- `XK_REQUEST_TIMEOUT` / `XK_REQUEST_INTERVAL`：请求超时与重试间隔
-- `XK_MAX_ATTEMPTS`：单课最大尝试次数，`0` 表示不限制
-- `XK_CATEGORY`：`0` 必修 / `1` 选修
-- `XK_REQUIRED_COURSES`：必修课，格式 `课程号:课序号`，逗号分隔
-- `XK_ELECTIVE_COURSES`：选修课，只填课程号，逗号分隔
-- `XK_OCR_MODEL`：ONNX 模型路径
+- `loginname` / `password`：学号与密码，留空时每次启动交互输入
+- `ocr_captcha`：`true` 自动识别验证码，`false` 保存图片后手动输入
+- `debug`：`true` 保存接口原始响应（`login_pac.json` 等）
+- `batch_keyword`：批次名称关键字，留空自动选择第一个可选批次
+- `campus`：课程列表接口使用的校区代码
+- `request_timeout` / `request_interval`：请求超时与重试间隔（秒）
+- `max_attempts`：单课最大尝试次数，`0` 表示不限制
+- `category`：`0` 必修 / `1` 选修
+- `required_courses`：必修课 `[[required_courses]]` 数组表，每门课填 `kch`（课程号）与 `kxh`（课序号）
+- `elective_courses`：选修课，字符串数组，只填课程号
+- `ocr_model`：ONNX 模型路径
+
+课程不再挤在一个变量里，而是结构化存放：
+
+```toml
+elective_courses = ["FL006066", "FL006121"]
+
+[[required_courses]]
+kch = "TE204004"
+kxh = "06"
+```
 
 ## 关于 ddddocr-rs 的本地补丁
 

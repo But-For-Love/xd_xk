@@ -1,0 +1,41 @@
+# 西电选课工具配置示例：复制为 config.toml 后按需修改。
+# 首次运行也会自动生成 config.toml；旧版 .env 会自动迁移过来。
+
+# 学号与密码，留空时每次启动交互输入
+loginname = ""
+password = ""
+
+# true 自动识别验证码，false 保存图片后手动输入
+ocr_captcha = true
+# true 保存接口原始响应（login_pac.json 等）
+debug = false
+
+# 批次名称关键字，留空自动选择第一个可选批次
+batch_keyword = ""
+# 课程列表接口使用的校区代码
+campus = "S"
+
+# 请求超时与重试间隔（秒）
+request_timeout = 12.0
+request_interval = 1.0
+
+# 单课最大尝试次数，0 表示不限制
+max_attempts = 0
+
+# 0 必修 / 1 选修
+category = 0
+
+# ONNX 模型路径
+ocr_model = "ddddocr.onnx"
+
+# 选修课：字符串数组，只填课程号
+elective_courses = ["FL006066", "FL006121"]
+
+# 必修课：课程号 kch + 课序号 kxh，每门课一段
+[[required_courses]]
+kch = "TE204004"
+kxh = "06"
+
+[[required_courses]]
+kch = "TE204004"
+kxh = "07"

@@ -5,11 +5,11 @@ use clap::{Parser, Subcommand};
 #[derive(Debug, Parser)]
 #[command(name = "xd-xk-rust", version, about = "西电选课工具（Rust 重构版）")]
 pub struct Cli {
-    /// 配置文件路径，默认读取当前目录 .env
-    #[arg(long, global = true, default_value = ".env", value_name = "PATH")]
+    /// TOML 配置文件路径，默认读取当前目录 config.toml
+    #[arg(long, global = true, default_value = "config.toml", value_name = "PATH")]
     pub config: PathBuf,
 
-    /// ddddocr ONNX 模型路径；默认取 XK_OCR_MODEL，再默认 ddddocr.onnx
+    /// ddddocr ONNX 模型路径；默认取配置中的 ocr_model，再默认 ddddocr.onnx
     #[arg(long, global = true, value_name = "PATH")]
     pub model: Option<PathBuf>,
 

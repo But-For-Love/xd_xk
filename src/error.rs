@@ -36,7 +36,7 @@ pub enum XkError {
     Ocr(String),
 
     #[error(
-        "验证码模型未找到：{0}；请先运行 scripts/setup-model.ps1，或配置 XK_OCR_MODEL / --model"
+        "验证码模型未找到：{0}；请先运行 scripts/setup-model.ps1，或在配置中设置 ocr_model / 使用 --model"
     )]
     ModelNotFound(String),
 

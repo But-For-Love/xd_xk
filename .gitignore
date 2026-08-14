@@ -1,8 +1,9 @@
 /target
 /target-fixed
+# 运行配置（含密码）；旧版 .env 启动时会自动迁移
+/config.toml
 .env
 .env.*
-!.env.example
 
 # 验证码模型（约 13MB）随仓库提交；scripts/setup-model.ps1 可重新生成
 
